@@ -9,6 +9,9 @@ import uuid
 from datetime import timedelta
 from django.utils import timezone
 from .utils import send_verification_email, send_password_reset_email
+import os
+import openai
+from django.conf import settings
 
 
 # Create your views here.
@@ -731,3 +734,114 @@ def update_user_weight(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def calculate_bmi(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if height and weight are set
+            if user.height is None or user.weight is None:
+                missing_fields = []
+                if user.height is None:
+                    missing_fields.append("height")
+                if user.weight is None:
+                    missing_fields.append("weight")
+
+                return Response(
+                    {"error": f"Missing required fields: {', '.join(missing_fields)}. Please update your profile."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Calculate BMI: weight(kg) / (height(m))^2
+            height_m = user.height / 100  # Convert cm to m
+            bmi = user.weight / (height_m ** 2)
+            bmi = round(bmi, 2)  # Round to 2 decimal places
+
+            # Determine BMI category
+            category = get_bmi_category(bmi)
+
+            # Get AI comments on BMI
+            ai_comment = get_openai_bmi_comment(bmi, category, user)
+
+            return Response({
+                "bmi": bmi,
+                "category": category,
+                "comment": ai_comment,
+                "height_cm": user.height,
+                "weight_kg": user.weight
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+def get_bmi_category(bmi):
+    if bmi < 18.5:
+        return "Underweight"
+    elif 18.5 <= bmi < 25:
+        return "Normal weight"
+    elif 25 <= bmi < 30:
+        return "Overweight"
+    else:
+        return "Obese"
+
+
+def get_openai_bmi_comment(bmi, category, user):
+    try:
+        # No need to manually grab the API key
+        client = openai.OpenAI()  # It will use OPENAI_API_KEY from env automatically
+
+        # Prepare user information for context
+        user_info = f"Age: {user.age if user.age else 'Unknown'}, "
+        user_info += f"Gender: {user.gender if user.gender else 'Unknown'}"
+
+        # Create prompt for OpenAI
+        prompt = f"Provide a brief, personalized health comment about a person with a BMI of {bmi} " \
+            f"which falls in the '{category}' category. {user_info}. " \
+            f"Include general advice for this BMI category. Keep it under 150 words and positive in tone."
+
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful fitness assistant providing brief BMI analysis."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error getting OpenAI comment: {str(e)}")
+        return f"Your BMI is {bmi}, which is classified as '{category}'. For personalized advice, please consult a healthcare professional."

@@ -18,4 +18,5 @@ urlpatterns = [
     path('api/update-gender', views.update_user_gender, name='update_user_gender'),
     path('api/update-height', views.update_user_height, name='update_user_height'),
     path('api/update-weight', views.update_user_weight, name='update_user_weight'),
+    path('api/calculate-bmi', views.calculate_bmi, name='calculate_bmi'),
 ]
