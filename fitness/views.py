@@ -2,9 +2,12 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User
+from .models import User, Token
 from .serializers import UserSerializer
 from django.contrib.auth.hashers import make_password, check_password
+import uuid
+from datetime import timedelta
+from django.utils import timezone
 
 
 # Create your views here.
@@ -81,15 +84,96 @@ def login_user(request):
 
         # Verify password
         if check_password(data.get('password'), user.password):
-            # Password is correct, return user data
+            # Password is correct, generate token
+            remember_me = data.get('remember_me', False)
+
+            # Create a new token
+            token = Token.objects.create(
+                user=user,
+                is_remember_me=remember_me
+            )
+
+            # Return user data and token
             serializer = UserSerializer(user)
             return Response({
                 "message": "Login successful",
-                "user": serializer.data
+                "user": serializer.data,
+                "token": token.token,
+                "expires_at": token.expires_at,
+                "is_remember_me": token.is_remember_me
             }, status=status.HTTP_200_OK)
         else:
             # Password is incorrect
             return Response(
                 {"error": "Incorrect password."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def validate_token(request):
+    if request.method == 'POST':
+        data = request.data
+
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                # Remove expired token
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            # Token is valid, return user data
+            serializer = UserSerializer(token.user)
+            return Response({
+                "message": "Token is valid",
+                "user": serializer.data,
+                "token": token.token,
+                "expires_at": token.expires_at,
+                "is_remember_me": token.is_remember_me
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def logout_user(request):
+    if request.method == 'POST':
+        data = request.data
+
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            token = Token.objects.get(token=token_str)
+            token.delete()
+            return Response(
+                {"message": "Logged out successfully."},
+                status=status.HTTP_200_OK
+            )
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
