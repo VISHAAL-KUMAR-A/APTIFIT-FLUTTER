@@ -4,10 +4,11 @@ from django.db import models
 
 
 class User(models.Model):
-    name = models.CharField(max_length=200)
-    email = models.EmailField(max_length=200)
+    email = models.EmailField(max_length=200, unique=True)
     password = models.CharField(max_length=200)
-    age = models.IntegerField()
-    gender = models.CharField(max_length=200)
-    height = models.IntegerField()
-    weight = models.IntegerField()
+    # Optional fields that can be null/blank
+    name = models.CharField(max_length=200, null=True, blank=True)
+    age = models.IntegerField(null=True, blank=True)
+    gender = models.CharField(max_length=200, null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    weight = models.IntegerField(null=True, blank=True)
