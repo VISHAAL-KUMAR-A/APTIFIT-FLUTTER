@@ -360,3 +360,374 @@ def reset_password(request, token=None):
                 {"error": "Invalid password reset token."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+@api_view(['POST'])
+def update_user_name(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if name is provided
+        if 'name' not in data:
+            return Response(
+                {"error": "Name is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if name is already set (only first-time users can set their name)
+            if user.name:
+                return Response(
+                    {"error": "Name is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user name
+            user.name = data.get('name')
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Name updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_user_age(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if age is provided
+        if 'age' not in data:
+            return Response(
+                {"error": "Age is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if age is already set (only first-time users can set their age)
+            if user.age is not None:
+                return Response(
+                    {"error": "Age is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate that age is a positive integer
+            try:
+                age = int(data.get('age'))
+                if age <= 0:
+                    return Response(
+                        {"error": "Age must be a positive number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except ValueError:
+                return Response(
+                    {"error": "Age must be a valid number."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user age
+            user.age = age
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Age updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_user_gender(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if gender is provided
+        if 'gender' not in data:
+            return Response(
+                {"error": "Gender is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if gender is already set (only first-time users can set their gender)
+            if user.gender is not None and user.gender != '':
+                return Response(
+                    {"error": "Gender is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate gender input (you can customize this validation based on your requirements)
+            gender = data.get('gender').strip()
+            if not gender:
+                return Response(
+                    {"error": "Gender cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Optional: Add validation for specific gender values if needed
+            valid_genders = ['male', 'female',
+                             'non-binary', 'other', 'prefer not to say']
+            if gender.lower() not in valid_genders:
+                return Response(
+                    {"error": f"Gender must be one of: {', '.join(valid_genders)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user gender
+            user.gender = gender.lower()
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Gender updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_user_height(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if height is provided
+        if 'height' not in data:
+            return Response(
+                {"error": "Height is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if height is already set (only first-time users can set their height)
+            if user.height is not None:
+                return Response(
+                    {"error": "Height is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate that height is a positive integer (in cm)
+            try:
+                height = int(data.get('height'))
+                if height <= 0:
+                    return Response(
+                        {"error": "Height must be a positive number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Optional: Add a reasonable range check (e.g., 50-300 cm)
+                if height < 50 or height > 300:
+                    return Response(
+                        {"error": "Height must be between 50 and 300 cm."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except ValueError:
+                return Response(
+                    {"error": "Height must be a valid number."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user height
+            user.height = height
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Height updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_user_weight(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if weight is provided
+        if 'weight' not in data:
+            return Response(
+                {"error": "Weight is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if weight is already set (only first-time users can set their weight)
+            if user.weight is not None:
+                return Response(
+                    {"error": "Weight is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate that weight is a positive integer (in kg)
+            try:
+                weight = int(data.get('weight'))
+                if weight <= 0:
+                    return Response(
+                        {"error": "Weight must be a positive number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Optional: Add a reasonable range check (e.g., 20-500 kg)
+                if weight < 20 or weight > 500:
+                    return Response(
+                        {"error": "Weight must be between 20 and 500 kg."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except ValueError:
+                return Response(
+                    {"error": "Weight must be a valid number."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user weight
+            user.weight = weight
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Weight updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
