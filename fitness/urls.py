@@ -10,4 +10,7 @@ urlpatterns = [
          views.verify_email, name='verify_email'),
     path('api/resend-verification', views.resend_verification,
          name='resend_verification'),
+    path('api/forgot-password', views.forgot_password, name='forgot_password'),
+    path('api/reset-password/<str:token>',
+         views.reset_password, name='reset_password'),
 ]

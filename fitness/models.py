@@ -22,6 +22,12 @@ class User(models.Model):
         max_length=255, null=True, blank=True)
     verification_token_created_at = models.DateTimeField(null=True, blank=True)
 
+    # Password reset fields
+    reset_password_token = models.CharField(
+        max_length=255, null=True, blank=True)
+    reset_password_token_created_at = models.DateTimeField(
+        null=True, blank=True)
+
     def generate_verification_token(self):
         self.verification_token = str(uuid.uuid4())
         self.verification_token_created_at = timezone.now()
@@ -33,6 +39,18 @@ class User(models.Model):
         if not self.verification_token_created_at:
             return False
         return timezone.now() < self.verification_token_created_at + timedelta(hours=24)
+
+    def generate_reset_password_token(self):
+        self.reset_password_token = str(uuid.uuid4())
+        self.reset_password_token_created_at = timezone.now()
+        self.save()
+        return self.reset_password_token
+
+    def is_reset_token_valid(self):
+        # Token is valid for 1 hour
+        if not self.reset_password_token_created_at:
+            return False
+        return timezone.now() < self.reset_password_token_created_at + timedelta(hours=1)
 
 
 class Token(models.Model):

@@ -8,7 +8,7 @@ from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
 from django.utils import timezone
-from .utils import send_verification_email
+from .utils import send_verification_email, send_password_reset_email
 
 
 # Create your views here.
@@ -257,4 +257,106 @@ def logout_user(request):
             return Response(
                 {"error": "Invalid token."},
                 status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def forgot_password(request):
+    if request.method == 'POST':
+        data = request.data
+
+        if 'email' not in data:
+            return Response(
+                {"error": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = data.get('email')
+
+        try:
+            user = User.objects.get(email=email)
+
+            # Send password reset email
+            send_password_reset_email(user, request)
+
+            return Response(
+                {"message": "If an account with this email exists, a password reset link has been sent."},
+                status=status.HTTP_200_OK
+            )
+
+        except User.DoesNotExist:
+            # For security reasons, don't reveal that the email doesn't exist
+            # Return the same message as if the email was found
+            return Response(
+                {"message": "If an account with this email exists, a password reset link has been sent."},
+                status=status.HTTP_200_OK
+            )
+
+
+@api_view(['GET', 'POST'])
+def reset_password(request, token=None):
+    # GET request is used to verify the token
+    if request.method == 'GET':
+        try:
+            user = User.objects.get(reset_password_token=token)
+
+            # Check if token is valid
+            if not user.is_reset_token_valid():
+                return Response(
+                    {"error": "Password reset link has expired. Please request a new one."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(
+                {"message": "Token is valid. You can now reset your password."},
+                status=status.HTTP_200_OK
+            )
+
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Invalid password reset token."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # POST request is used to update the password
+    elif request.method == 'POST':
+        data = request.data
+
+        if 'password' not in data or 'confirm_password' not in data:
+            return Response(
+                {"error": "Password and confirm password are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if data.get('password') != data.get('confirm_password'):
+            return Response(
+                {"error": "Passwords do not match."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(reset_password_token=token)
+
+            # Check if token is valid
+            if not user.is_reset_token_valid():
+                return Response(
+                    {"error": "Password reset link has expired. Please request a new one."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update password
+            user.password = make_password(data.get('password'))
+            user.reset_password_token = None
+            user.reset_password_token_created_at = None
+            user.save()
+
+            return Response(
+                {"message": "Password has been reset successfully. You can now log in with your new password."},
+                status=status.HTTP_200_OK
+            )
+
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Invalid password reset token."},
+                status=status.HTTP_400_BAD_REQUEST
             )
