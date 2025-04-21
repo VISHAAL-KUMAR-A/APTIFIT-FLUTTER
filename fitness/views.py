@@ -44,12 +44,6 @@ def register_user(request):
             'password': data.get('password')
         }
 
-        # Add optional fields if they exist
-        optional_fields = ['name', 'age', 'gender', 'height', 'weight']
-        for field in optional_fields:
-            if field in data:
-                user_data[field] = data.get(field)
-
         serializer = UserSerializer(data=user_data)
         if serializer.is_valid():
             serializer.save()
