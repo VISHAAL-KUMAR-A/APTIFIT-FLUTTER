@@ -16,6 +16,24 @@ class User(models.Model):
     height = models.IntegerField(null=True, blank=True)
     weight = models.IntegerField(null=True, blank=True)
 
+    # Email verification fields
+    is_verified = models.BooleanField(default=False)
+    verification_token = models.CharField(
+        max_length=255, null=True, blank=True)
+    verification_token_created_at = models.DateTimeField(null=True, blank=True)
+
+    def generate_verification_token(self):
+        self.verification_token = str(uuid.uuid4())
+        self.verification_token_created_at = timezone.now()
+        self.save()
+        return self.verification_token
+
+    def is_token_valid(self):
+        # Token is valid for 24 hours
+        if not self.verification_token_created_at:
+            return False
+        return timezone.now() < self.verification_token_created_at + timedelta(hours=24)
+
 
 class Token(models.Model):
     user = models.ForeignKey(

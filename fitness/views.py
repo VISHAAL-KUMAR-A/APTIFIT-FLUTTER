@@ -8,6 +8,7 @@ from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
 from django.utils import timezone
+from .utils import send_verification_email
 
 
 # Create your views here.
@@ -53,12 +54,85 @@ def register_user(request):
 
         serializer = UserSerializer(data=user_data)
         if serializer.is_valid():
-            serializer.save()
+            user = serializer.save()
+
+            # Send verification email
+            send_verification_email(user, request)
+
             return Response(
-                {"message": "User registered successfully", "user": serializer.data},
+                {
+                    "message": "User registered successfully. Please check your email to verify your account.",
+                    "user": serializer.data
+                },
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def verify_email(request, token):
+    try:
+        user = User.objects.get(verification_token=token)
+
+        # Check if token is valid
+        if not user.is_token_valid():
+            return Response(
+                {"error": "Verification link has expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Mark user as verified
+        user.is_verified = True
+        user.verification_token = None
+        user.verification_token_created_at = None
+        user.save()
+
+        return Response(
+            {"message": "Email verification successful. You can now log in."},
+            status=status.HTTP_200_OK
+        )
+
+    except User.DoesNotExist:
+        return Response(
+            {"error": "Invalid verification token."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+def resend_verification(request):
+    if request.method == 'POST':
+        data = request.data
+
+        if 'email' not in data:
+            return Response(
+                {"error": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=data.get('email'))
+
+            # Check if user is already verified
+            if user.is_verified:
+                return Response(
+                    {"message": "Email is already verified."},
+                    status=status.HTTP_200_OK
+                )
+
+            # Send verification email
+            send_verification_email(user, request)
+
+            return Response(
+                {"message": "Verification email has been resent."},
+                status=status.HTTP_200_OK
+            )
+
+        except User.DoesNotExist:
+            return Response(
+                {"error": "No account found with this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 @api_view(['POST'])
@@ -80,6 +154,13 @@ def login_user(request):
             return Response(
                 {"error": "No account found with this email."},
                 status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if email is verified
+        if not user.is_verified:
+            return Response(
+                {"error": "Please verify your email before logging in."},
+                status=status.HTTP_401_UNAUTHORIZED
             )
 
         # Verify password
