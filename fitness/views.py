@@ -842,7 +842,7 @@ def get_openai_bmi_comment(bmi, category, user):
                 {"role": "system", "content": "You are a helpful fitness assistant providing very concise BMI analysis. Keep responses under 70 words with NO newlines."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=100,  # Reduced from 150 to enforce brevity
+            max_tokens=35,  # Reduced from 150 to enforce brevity
             temperature=0.7
         )
 
@@ -1088,6 +1088,91 @@ def update_reminder_mode(request):
             serializer = UserSerializer(user)
             return Response({
                 "message": "Reminder mode updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_diet_preference(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if diet_preference is provided
+        if 'diet_preference' not in data:
+            return Response(
+                {"error": "Diet preference is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if diet preference is already set
+            if user.diet_preference is not None and user.diet_preference != '':
+                return Response(
+                    {"error": "Diet preference is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate diet preference input
+            diet_preference = data.get('diet_preference').strip()
+            if not diet_preference:
+                return Response(
+                    {"error": "Diet preference cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed diet preferences
+            valid_preferences = [
+                'No Preference',
+                'Vegeterian',
+                'Vegan',
+                'Non-Vegeterian',
+                'Low-carb',
+                'Keto',
+                'Other'
+            ]
+
+            if diet_preference not in valid_preferences:
+                return Response(
+                    {"error": f"Diet preference must be one of: {', '.join(valid_preferences)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user diet preference
+            user.diet_preference = diet_preference
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Diet preference updated successfully.",
                 "user": serializer.data
             }, status=status.HTTP_200_OK)
 

@@ -25,4 +25,6 @@ urlpatterns = [
          name='update_activity_level'),
     path('api/update-reminder-mode', views.update_reminder_mode,
          name='update_reminder_mode'),
+    path('api/update-diet-preference', views.update_diet_preference,
+         name='update_diet_preference'),
 ]
