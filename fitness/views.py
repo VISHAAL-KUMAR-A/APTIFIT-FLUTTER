@@ -1181,3 +1181,169 @@ def update_diet_preference(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def calculate_bmr_and_ideal_weight(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if height, weight, age, and gender are set
+            missing_fields = []
+            if user.height is None:
+                missing_fields.append("height")
+            if user.weight is None:
+                missing_fields.append("weight")
+            if user.age is None:
+                missing_fields.append("age")
+            if user.gender is None or user.gender == '':
+                missing_fields.append("gender")
+
+            if missing_fields:
+                return Response(
+                    {"error": f"Missing required fields: {', '.join(missing_fields)}. Please update your profile."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get BMR and ideal weight range from OpenAI
+            result = get_openai_bmr_and_ideal_weight(user)
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+def get_openai_bmr_and_ideal_weight(user):
+    try:
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return {
+                "error": "BMR and ideal weight calculation not available.",
+                "bmr": None,
+                "ideal_weight_range": None
+            }
+
+        # Using project API key requires specific configuration
+        client = openai.OpenAI(
+            api_key=api_key
+        )
+
+        # Prepare user information for context
+        user_info = (
+            f"Age: {user.age}, "
+            f"Gender: {user.gender}, "
+            f"Height: {user.height} cm, "
+            f"Weight: {user.weight} kg"
+        )
+
+        # Create prompt for OpenAI - modified to work without response_format parameter
+        prompt = (
+            f"For a person with the following information: {user_info}, calculate their BMR "
+            f"(Basal Metabolic Rate) and ideal weight range. "
+            f"Please provide the results with BMR as a number in calories per day, "
+            f"and ideal weight range as a string in kg (e.g., '60-65 kg'). "
+            f"Return ONLY a valid JSON object with keys 'bmr' (number) and 'ideal_weight_range' (string). "
+            f"No explanations or additional text."
+        )
+
+        # Call OpenAI API without the response_format parameter
+        response = client.chat.completions.create(
+            model="gpt-4",  # Using GPT-4 for more accurate calculations
+            messages=[
+                {"role": "system", "content": "You are a fitness expert that calculates BMR and ideal weight range. Respond with a JSON object only with keys 'bmr' and 'ideal_weight_range'. No explanations."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.5
+        )
+
+        # Parse the response
+        result = response.choices[0].message.content.strip()
+        import json
+
+        # Handle potential JSON parsing issues
+        try:
+            parsed_result = json.loads(result)
+        except json.JSONDecodeError:
+            # If the response isn't valid JSON, try to extract the JSON part
+            import re
+            json_match = re.search(r'({.*})', result, re.DOTALL)
+            if json_match:
+                try:
+                    parsed_result = json.loads(json_match.group(1))
+                except:
+                    return {
+                        "bmr": None,
+                        "ideal_weight_range": None,
+                        "error": "Failed to parse AI response. Please try again."
+                    }
+            else:
+                return {
+                    "bmr": None,
+                    "ideal_weight_range": None,
+                    "error": "Failed to parse AI response. Please try again."
+                }
+
+        # Ensure we have the expected keys
+        if 'bmr' not in parsed_result or 'ideal_weight_range' not in parsed_result:
+            return {
+                "bmr": None,
+                "ideal_weight_range": None,
+                "error": "Failed to calculate BMR and ideal weight range."
+            }
+
+        # Ensure BMR is a number
+        try:
+            parsed_result['bmr'] = float(parsed_result['bmr'])
+        except (ValueError, TypeError):
+            # If BMR isn't a number, try to extract it
+            if isinstance(parsed_result['bmr'], str):
+                import re
+                bmr_match = re.search(r'(\d+(?:\.\d+)?)', parsed_result['bmr'])
+                if bmr_match:
+                    parsed_result['bmr'] = float(bmr_match.group(1))
+                else:
+                    parsed_result['bmr'] = None
+
+        # Add activity level to the response if available
+        if user.activity_level:
+            parsed_result["activity_level"] = user.activity_level
+
+        return parsed_result
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error getting OpenAI BMR and ideal weight: {str(e)}")
+        return {
+            "bmr": None,
+            "ideal_weight_range": None,
+            "error": "Failed to calculate BMR and ideal weight range. Please try again later."
+        }

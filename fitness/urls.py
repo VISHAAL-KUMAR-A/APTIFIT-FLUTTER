@@ -27,4 +27,6 @@ urlpatterns = [
          name='update_reminder_mode'),
     path('api/update-diet-preference', views.update_diet_preference,
          name='update_diet_preference'),
+    path('api/calculate-bmr-ideal-weight', views.calculate_bmr_and_ideal_weight,
+         name='calculate_bmr_and_ideal_weight'),
 ]
