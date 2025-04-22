@@ -588,10 +588,18 @@ def update_user_height(request):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Check if height is provided
+        # Check if height and unit are provided
         if 'height' not in data:
             return Response(
                 {"error": "Height is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get unit, default to cm if not provided
+        unit = data.get('unit', 'cm').lower()
+        if unit not in ['cm', 'in']:
+            return Response(
+                {"error": "Unit must be either 'cm' or 'in'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -618,18 +626,25 @@ def update_user_height(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Validate that height is a positive integer (in cm)
+            # Validate that height is a positive number
             try:
-                height = int(data.get('height'))
+                height = float(data.get('height'))
                 if height <= 0:
                     return Response(
                         {"error": "Height must be a positive number."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+
+                # Convert inches to cm if needed
+                if unit == 'in':
+                    height = round(height * 2.54)  # 1 inch = 2.54 cm
+                else:
+                    height = round(height)  # Round to nearest cm
+
                 # Optional: Add a reasonable range check (e.g., 50-300 cm)
                 if height < 50 or height > 300:
                     return Response(
-                        {"error": "Height must be between 50 and 300 cm."},
+                        {"error": "Height must be between 50 and 300 cm (19.7 and 118.1 inches)."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             except ValueError:
@@ -638,7 +653,7 @@ def update_user_height(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update user height
+            # Update user height (always stored in cm)
             user.height = height
             user.save()
 
@@ -646,7 +661,8 @@ def update_user_height(request):
             serializer = UserSerializer(user)
             return Response({
                 "message": "Height updated successfully.",
-                "user": serializer.data
+                "user": serializer.data,
+                "stored_unit": "cm" if unit == 'cm' else "in"
             }, status=status.HTTP_200_OK)
 
         except Token.DoesNotExist:
@@ -675,6 +691,14 @@ def update_user_weight(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get unit, default to kg if not provided
+        unit = data.get('unit', 'kg').lower()
+        if unit not in ['kg', 'lbs']:
+            return Response(
+                {"error": "Unit must be either 'kg' or 'lbs'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         token_str = data.get('token')
 
         try:
@@ -698,18 +722,25 @@ def update_user_weight(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Validate that weight is a positive integer (in kg)
+            # Validate that weight is a positive number
             try:
-                weight = int(data.get('weight'))
+                weight = float(data.get('weight'))
                 if weight <= 0:
                     return Response(
                         {"error": "Weight must be a positive number."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+
+                # Convert lbs to kg if needed
+                if unit == 'lbs':
+                    weight = round(weight * 0.453592)  # 1 lbs = 0.453592 kg
+                else:
+                    weight = round(weight)  # Round to nearest kg
+
                 # Optional: Add a reasonable range check (e.g., 20-500 kg)
                 if weight < 20 or weight > 500:
                     return Response(
-                        {"error": "Weight must be between 20 and 500 kg."},
+                        {"error": "Weight must be between 20 and 500 kg (44 and 1102 lbs)."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             except ValueError:
@@ -718,7 +749,7 @@ def update_user_weight(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update user weight
+            # Update user weight (always stored in kg)
             user.weight = weight
             user.save()
 
@@ -726,7 +757,8 @@ def update_user_weight(request):
             serializer = UserSerializer(user)
             return Response({
                 "message": "Weight updated successfully.",
-                "user": serializer.data
+                "user": serializer.data,
+                "stored_unit": "kg" if unit == 'kg' else "lbs"
             }, status=status.HTTP_200_OK)
 
         except Token.DoesNotExist:
