@@ -816,30 +816,41 @@ def get_bmi_category(bmi):
 
 def get_openai_bmi_comment(bmi, category, user):
     try:
-        # No need to manually grab the API key
-        client = openai.OpenAI()  # It will use OPENAI_API_KEY from env automatically
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return "BMI analysis comment not available."
+
+        # Using project API key requires specific configuration
+        client = openai.OpenAI(
+            api_key=api_key
+        )
 
         # Prepare user information for context
         user_info = f"Age: {user.age if user.age else 'Unknown'}, "
         user_info += f"Gender: {user.gender if user.gender else 'Unknown'}"
 
-        # Create prompt for OpenAI
-        prompt = f"Provide a brief, personalized health comment about a person with a BMI of {bmi} " \
+        # Create prompt for OpenAI - updated to specify shorter response with no newlines
+        prompt = f"Provide a very brief (50-70 words max), personalized health comment about a person with a BMI of {bmi} " \
             f"which falls in the '{category}' category. {user_info}. " \
-            f"Include general advice for this BMI category. Keep it under 150 words and positive in tone."
+            f"Include concise advice. DO NOT use any line breaks or newline characters in your response. Keep it as a single paragraph with a positive tone."
 
         # Call OpenAI API
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful fitness assistant providing brief BMI analysis."},
+                {"role": "system", "content": "You are a helpful fitness assistant providing very concise BMI analysis. Keep responses under 70 words with NO newlines."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=150,
+            max_tokens=100,  # Reduced from 150 to enforce brevity
             temperature=0.7
         )
 
-        return response.choices[0].message.content.strip()
+        # Get the response and remove any newlines that might still appear
+        comment = response.choices[0].message.content.strip()
+        comment = comment.replace('\n', ' ').replace('  ', ' ')
+
+        return comment
 
     except Exception as e:
         # Log the error (in a production environment)
