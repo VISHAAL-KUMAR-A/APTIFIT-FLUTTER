@@ -909,8 +909,8 @@ def update_fitness_goal(request):
                 )
 
             # Validate allowed fitness goals
-            valid_goals = ['Lose weight', 'Build Muscle', 'Improve sleep',
-                           'Increase Endurance', 'Boost overall health', 'Other']
+            valid_goals = ['Lose Weight', 'Build Muscle', 'Improve Sleep',
+                           'Increase Endurance', 'Boost Overall Health', 'Other']
             if fitness_goal not in valid_goals:
                 return Response(
                     {"error": f"Fitness goal must be one of: {', '.join(valid_goals)}"},
@@ -925,6 +925,88 @@ def update_fitness_goal(request):
             serializer = UserSerializer(user)
             return Response({
                 "message": "Fitness goal updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_activity_level(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if activity_level is provided
+        if 'activity_level' not in data:
+            return Response(
+                {"error": "Activity level is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if activity level is already set
+            if user.activity_level is not None and user.activity_level != '':
+                return Response(
+                    {"error": "Activity level is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate activity level input
+            activity_level = data.get('activity_level').strip()
+            if not activity_level:
+                return Response(
+                    {"error": "Activity level cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed activity levels
+            valid_levels = [
+                'Sedentary-mostly sitting(little or no exercise)',
+                'Lightly Active-Light exercise/sports 1-3 days/week',
+                'Moderately Active-Moderate exercise/sports 3-5 days/week',
+                'Very Active-Hard exercise/sports 6-7days/week'
+            ]
+
+            if activity_level not in valid_levels:
+                return Response(
+                    {"error": f"Activity level must be one of: {', '.join(valid_levels)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user activity level
+            user.activity_level = activity_level
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Activity level updated successfully.",
                 "user": serializer.data
             }, status=status.HTTP_200_OK)
 

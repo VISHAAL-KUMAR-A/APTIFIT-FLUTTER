@@ -21,4 +21,6 @@ urlpatterns = [
     path('api/calculate-bmi', views.calculate_bmi, name='calculate_bmi'),
     path('api/update-fitness-goal', views.update_fitness_goal,
          name='update_fitness_goal'),
+    path('api/update-activity-level', views.update_activity_level,
+         name='update_activity_level'),
 ]
