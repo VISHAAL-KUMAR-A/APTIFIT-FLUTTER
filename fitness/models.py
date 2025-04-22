@@ -17,6 +17,7 @@ class User(models.Model):
     weight = models.IntegerField(null=True, blank=True)
     fitness_goal = models.CharField(max_length=50, null=True, blank=True)
     activity_level = models.CharField(max_length=50, null=True, blank=True)
+    reminder_mode = models.CharField(max_length=50, null=True, blank=True)
 
     # Email verification fields
     is_verified = models.BooleanField(default=False)

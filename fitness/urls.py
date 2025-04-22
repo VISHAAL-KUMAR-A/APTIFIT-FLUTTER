@@ -23,4 +23,6 @@ urlpatterns = [
          name='update_fitness_goal'),
     path('api/update-activity-level', views.update_activity_level,
          name='update_activity_level'),
+    path('api/update-reminder-mode', views.update_reminder_mode,
+         name='update_reminder_mode'),
 ]

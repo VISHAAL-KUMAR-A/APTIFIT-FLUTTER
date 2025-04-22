@@ -1015,3 +1015,84 @@ def update_activity_level(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def update_reminder_mode(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if reminder_mode is provided
+        if 'reminder_mode' not in data:
+            return Response(
+                {"error": "Reminder mode is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if reminder mode is already set
+            if user.reminder_mode is not None and user.reminder_mode != '':
+                return Response(
+                    {"error": "Reminder mode is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate reminder mode input
+            reminder_mode = data.get('reminder_mode').strip()
+            if not reminder_mode:
+                return Response(
+                    {"error": "Reminder mode cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed reminder modes
+            valid_modes = [
+                'Chill Mode-A couple of gentle reminders per day',
+                'Active Mode-Regular check-ins to keep you on track',
+                'Beast Mode-Frequent nudges for a rigorous schedule'
+            ]
+
+            if reminder_mode not in valid_modes:
+                return Response(
+                    {"error": f"Reminder mode must be one of: {', '.join(valid_modes)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user reminder mode
+            user.reminder_mode = reminder_mode
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Reminder mode updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
