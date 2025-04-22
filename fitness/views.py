@@ -1379,3 +1379,52 @@ def get_openai_bmr_and_ideal_weight(user):
             "ideal_weight_range": None,
             "error": "Failed to calculate BMR and ideal weight range. Please try again later."
         }
+
+
+@api_view(['POST'])
+def get_user_fitness_profile(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Return user's fitness profile information
+            fitness_profile = {
+                "fitness_goal": user.fitness_goal,
+                "gender": user.gender,
+                "age": user.age,
+                "height": user.height,
+                "weight": user.weight,
+                "activity_level": user.activity_level,
+                "diet_preference": user.diet_preference,
+                "reminder_mode": user.reminder_mode
+            }
+
+            return Response(fitness_profile, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )

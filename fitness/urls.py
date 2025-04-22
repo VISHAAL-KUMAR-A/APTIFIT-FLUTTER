@@ -29,4 +29,6 @@ urlpatterns = [
          name='update_diet_preference'),
     path('api/calculate-bmr-ideal-weight', views.calculate_bmr_and_ideal_weight,
          name='calculate_bmr_and_ideal_weight'),
+    path('api/get-fitness-profile', views.get_user_fitness_profile,
+         name='get_user_fitness_profile'),
 ]
