@@ -15,6 +15,7 @@ class User(models.Model):
     gender = models.CharField(max_length=200, null=True, blank=True)
     height = models.IntegerField(null=True, blank=True)
     weight = models.IntegerField(null=True, blank=True)
+    fitness_goal = models.CharField(max_length=50, null=True, blank=True)
 
     # Email verification fields
     is_verified = models.BooleanField(default=False)

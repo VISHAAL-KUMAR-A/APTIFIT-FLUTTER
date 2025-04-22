@@ -856,3 +856,80 @@ def get_openai_bmi_comment(bmi, category, user):
         # Log the error (in a production environment)
         print(f"Error getting OpenAI comment: {str(e)}")
         return f"Your BMI is {bmi}, which is classified as '{category}'. For personalized advice, please consult a healthcare professional."
+
+
+@api_view(['POST'])
+def update_fitness_goal(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if fitness goal is provided
+        if 'fitness_goal' not in data:
+            return Response(
+                {"error": "Fitness goal is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if fitness goal is already set
+            if user.fitness_goal is not None and user.fitness_goal != '':
+                return Response(
+                    {"error": "Fitness goal is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate fitness goal input
+            fitness_goal = data.get('fitness_goal').strip()
+            if not fitness_goal:
+                return Response(
+                    {"error": "Fitness goal cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed fitness goals
+            valid_goals = ['Lose weight', 'Build Muscle', 'Improve sleep',
+                           'Increase Endurance', 'Boost overall health', 'Other']
+            if fitness_goal not in valid_goals:
+                return Response(
+                    {"error": f"Fitness goal must be one of: {', '.join(valid_goals)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user fitness goal
+            user.fitness_goal = fitness_goal
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Fitness goal updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
