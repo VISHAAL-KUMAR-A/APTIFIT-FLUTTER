@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'dj_rest_auth',
     'dj_rest_auth.registration',
+    'corsheaders',
 ]
 SITE_ID = 1
 
@@ -63,7 +64,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = 'APTIFIT_FLUTTER.urls'
 
