@@ -35,4 +35,7 @@ urlpatterns = [
          name='update_fitness_metrics'),
     path('api/get-fitness-metrics', views.get_fitness_metrics,
          name='get_fitness_metrics'),
+    path('api/health-question', views.health_question, name='health_question'),
+    path('api/health-qa-history', views.get_health_qa_history,
+         name='get_health_qa_history'),
 ]

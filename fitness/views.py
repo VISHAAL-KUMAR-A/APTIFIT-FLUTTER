@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics
-from .serializers import UserSerializer, FitnessMetricsSerializer
+from .models import User, Token, FitnessMetrics, HealthQA
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -1629,3 +1629,235 @@ def get_fitness_metrics(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def health_question(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if question is provided
+        if 'question' not in data or not data.get('question').strip():
+            return Response(
+                {"error": "Question is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+            question = data.get('question').strip()
+
+            # Get user profile data for context
+            user_profile = {
+                "name": user.name,
+                "age": user.age,
+                "gender": user.gender,
+                "height": user.height,
+                "weight": user.weight,
+                "fitness_goal": user.fitness_goal,
+                "activity_level": user.activity_level,
+                "diet_preference": user.diet_preference
+            }
+
+            # Get recent fitness metrics if available
+            recent_metrics = FitnessMetrics.objects.filter(
+                user=user).order_by('-date').first()
+            metrics_data = {}
+            if recent_metrics:
+                metrics_data = {
+                    "heart_rate": recent_metrics.heart_rate,
+                    "steps": recent_metrics.steps,
+                    "calories": recent_metrics.calories,
+                    "sleep_hours": recent_metrics.sleep_hours
+                }
+
+            # Get answer from GPT-4
+            answer = get_gpt_health_answer(
+                question, user_profile, metrics_data)
+
+            # Store the Q&A in the database
+            health_qa = HealthQA.objects.create(
+                user=user,
+                question=question,
+                answer=answer
+            )
+
+            return Response({
+                "question": question,
+                "answer": answer
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def get_health_qa_history(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Get Q&A history for the user
+            history = HealthQA.objects.filter(user=user)
+
+            # Apply pagination if specified
+            page_size = data.get('page_size', 10)
+            page = data.get('page', 1)
+
+            try:
+                page_size = int(page_size)
+                page = int(page)
+
+                if page_size <= 0 or page <= 0:
+                    raise ValueError
+
+                start = (page - 1) * page_size
+                end = start + page_size
+                history = history[start:end]
+
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "Invalid pagination parameters."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Serialize and return the history
+            serializer = HealthQASerializer(history, many=True)
+            return Response({
+                "history": serializer.data,
+                "page": page,
+                "page_size": page_size
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+def get_gpt_health_answer(question, user_profile, metrics_data):
+    try:
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return "Sorry, I'm unable to process your health question at the moment. Please try again later."
+
+        # Using project API key requires specific configuration
+        client = openai.OpenAI(
+            api_key=api_key
+        )
+
+        # Prepare context with user information
+        context = []
+
+        for key, value in user_profile.items():
+            if value is not None and value != '':
+                if key == 'height':
+                    context.append(f"Height: {value} cm")
+                elif key == 'weight':
+                    context.append(f"Weight: {value} kg")
+                else:
+                    context.append(f"{key.replace('_', ' ').title()}: {value}")
+
+        for key, value in metrics_data.items():
+            if value is not None:
+                if key == 'sleep_hours':
+                    context.append(f"Average sleep: {value} hours")
+                elif key == 'heart_rate':
+                    context.append(f"Heart rate: {value} bpm")
+                elif key == 'steps':
+                    context.append(f"Daily steps: {value}")
+                elif key == 'calories':
+                    context.append(f"Daily calories burned: {value}")
+
+        user_context = ", ".join(context)
+
+        # Create prompt for GPT-4 - explicitly tell it not to use newlines
+        system_message = (
+            "You are a professional health and fitness advisor. Answer the user's question in detail, "
+            "providing personalized advice based on their profile. Only answer questions related to health, "
+            "fitness, nutrition, exercise, wellness, and medical topics. For any other topics, politely "
+            "inform the user that you can only address health and fitness related questions. "
+            "Always provide evidence-based information and add appropriate disclaimers when necessary. "
+            "DO NOT include any newline characters (\\n) in your response."
+        )
+
+        user_message = (
+            f"User profile: {user_context}\n\n"
+            f"Question: {question}"
+        )
+
+        # Call GPT-4 API
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+
+        # Get the response and remove any newlines that might still appear
+        answer = response.choices[0].message.content.strip()
+        answer = answer.replace('\n', ' ').replace('\r', ' ')
+        # Remove any double spaces that might be created after replacing newlines
+        while '  ' in answer:
+            answer = answer.replace('  ', ' ')
+
+        # Check if the question is unrelated to health/fitness
+        if "I can only address health" in answer or "only answer questions related to health" in answer:
+            return "I can only answer questions related to health, fitness, nutrition, exercise, wellness, and medical topics. Please ask a health or fitness related question."
+
+        return answer
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error getting GPT answer: {str(e)}")
+        return "Sorry, I encountered an error processing your question. Please try again later."
