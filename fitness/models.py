@@ -76,3 +76,17 @@ class Token(models.Model):
 
     def is_valid(self):
         return timezone.now() < self.expires_at
+
+
+class FitnessMetrics(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='fitness_metrics')
+    date = models.DateField(default=timezone.now)
+    heart_rate = models.IntegerField(null=True, blank=True)
+    steps = models.IntegerField(null=True, blank=True)
+    calories = models.IntegerField(null=True, blank=True)
+    sleep_hours = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'date')

@@ -31,4 +31,8 @@ urlpatterns = [
          name='calculate_bmr_and_ideal_weight'),
     path('api/get-fitness-profile', views.get_user_fitness_profile,
          name='get_user_fitness_profile'),
+    path('api/update-fitness-metrics', views.update_fitness_metrics,
+         name='update_fitness_metrics'),
+    path('api/get-fitness-metrics', views.get_fitness_metrics,
+         name='get_fitness_metrics'),
 ]

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User
+from .models import User, FitnessMetrics
 from django.contrib.auth.hashers import make_password
 
 
@@ -23,3 +23,10 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data['password'] = make_password(
             validated_data.get('password'))
         return super().create(validated_data)
+
+
+class FitnessMetricsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FitnessMetrics
+        fields = ['id', 'date', 'heart_rate',
+                  'steps', 'calories', 'sleep_hours']

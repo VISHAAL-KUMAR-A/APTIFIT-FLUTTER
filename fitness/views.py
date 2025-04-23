@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token
-from .serializers import UserSerializer
+from .models import User, Token, FitnessMetrics
+from .serializers import UserSerializer, FitnessMetricsSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -1422,6 +1422,207 @@ def get_user_fitness_profile(request):
             }
 
             return Response(fitness_profile, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def update_fitness_metrics(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Parse date or use today's date
+            date_str = data.get('date')
+            if date_str:
+                try:
+                    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                date = timezone.now().date()
+
+            # Get or create a metrics record for this date
+            metrics, created = FitnessMetrics.objects.get_or_create(
+                user=user,
+                date=date
+            )
+
+            # Update fields if provided in the request
+            if 'heart_rate' in data:
+                try:
+                    heart_rate = int(data.get('heart_rate'))
+                    if heart_rate < 0:
+                        return Response(
+                            {"error": "Heart rate must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    metrics.heart_rate = heart_rate
+                except ValueError:
+                    return Response(
+                        {"error": "Heart rate must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            if 'steps' in data:
+                try:
+                    steps = int(data.get('steps'))
+                    if steps < 0:
+                        return Response(
+                            {"error": "Steps must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    metrics.steps = steps
+                except ValueError:
+                    return Response(
+                        {"error": "Steps must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            if 'calories' in data:
+                try:
+                    calories = int(data.get('calories'))
+                    if calories < 0:
+                        return Response(
+                            {"error": "Calories must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    metrics.calories = calories
+                except ValueError:
+                    return Response(
+                        {"error": "Calories must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            if 'sleep_hours' in data:
+                try:
+                    sleep_hours = float(data.get('sleep_hours'))
+                    if sleep_hours < 0 or sleep_hours > 24:
+                        return Response(
+                            {"error": "Sleep hours must be between 0 and 24."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    metrics.sleep_hours = sleep_hours
+                except ValueError:
+                    return Response(
+                        {"error": "Sleep hours must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Save the metrics
+            metrics.save()
+
+            # Return the updated metrics
+            serializer = FitnessMetricsSerializer(metrics)
+            return Response({
+                "message": "Fitness metrics updated successfully.",
+                "metrics": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def get_fitness_metrics(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Parse date parameters
+            start_date_str = data.get('start_date')
+            end_date_str = data.get('end_date')
+
+            # Filter by date range if provided
+            if start_date_str and end_date_str:
+                try:
+                    start_date = datetime.strptime(
+                        start_date_str, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(
+                        end_date_str, "%Y-%m-%d").date()
+
+                    metrics = FitnessMetrics.objects.filter(
+                        user=user,
+                        date__gte=start_date,
+                        date__lte=end_date
+                    ).order_by('-date')
+
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                # Get metrics for the last 7 days if no date range is specified
+                end_date = timezone.now().date()
+                start_date = end_date - timedelta(days=6)
+
+                metrics = FitnessMetrics.objects.filter(
+                    user=user,
+                    date__gte=start_date,
+                    date__lte=end_date
+                ).order_by('-date')
+
+            # Serialize and return the metrics
+            serializer = FitnessMetricsSerializer(metrics, many=True)
+            return Response({
+                "message": "Fitness metrics retrieved successfully.",
+                "metrics": serializer.data
+            }, status=status.HTTP_200_OK)
 
         except Token.DoesNotExist:
             return Response(
