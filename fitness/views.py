@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -2795,3 +2795,72 @@ def generate_exercise_tips(user, exercise_plan):
             })
 
         return stored_tips
+
+
+@api_view(['POST'])
+def record_exercise_metrics(request):
+    """
+    Record exercise metrics including heart rate, calories burnt, time and reps
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Extract data from the request
+    data = {
+        'heart_rate': request.data.get('heart_rate'),
+        'calories_burnt': request.data.get('calories_burnt'),
+        'exercise_time': request.data.get('exercise_time'),
+        'reps': request.data.get('reps'),
+        'date': request.data.get('date', timezone.now().date())
+    }
+
+    # Create and save the exercise metrics
+    exercise_metrics = ExerciseMetrics(user=user, **data)
+    exercise_metrics.save()
+
+    # Serialize the data for response
+    serializer = ExerciseMetricsSerializer(exercise_metrics)
+
+    return Response({
+        'status': 'success',
+        'message': 'Exercise metrics recorded successfully',
+        'data': serializer.data
+    }, status=201)
+
+
+@api_view(['GET'])
+def get_exercise_metrics(request):
+    """
+    Get all exercise metrics for the authenticated user
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get all exercise metrics for the user
+    metrics = ExerciseMetrics.objects.filter(user=user)
+    serializer = ExerciseMetricsSerializer(metrics, many=True)
+
+    return Response({
+        'status': 'success',
+        'data': serializer.data
+    })

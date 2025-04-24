@@ -128,3 +128,17 @@ class ExerciseTip(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ExerciseMetrics(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='exercise_metrics')
+    date = models.DateField(default=timezone.now)
+    heart_rate = models.IntegerField(null=True, blank=True)  # in bpm
+    calories_burnt = models.IntegerField(null=True, blank=True)
+    exercise_time = models.IntegerField(null=True, blank=True)  # in minutes
+    reps = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']

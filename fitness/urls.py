@@ -54,4 +54,8 @@ urlpatterns = [
          name='get_exercise_plans'),
     path('api/get-exercise-plan-tips', views.get_exercise_plan_tips,
          name='get_exercise_plan_tips'),
+    path('api/record-exercise-metrics', views.record_exercise_metrics,
+         name='record_exercise_metrics'),
+    path('api/get-exercise-metrics-history', views.get_exercise_metrics,
+         name='get_exercise_metrics_history'),
 ]
