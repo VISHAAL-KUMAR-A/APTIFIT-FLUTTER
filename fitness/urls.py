@@ -48,4 +48,8 @@ urlpatterns = [
          name='update_workout_duration'),
     path('api/update-fitness-level', views.update_fitness_level,
          name='update_fitness_level'),
+    path('api/generate-exercise-plan', views.generate_weekly_exercise_plan,
+         name='generate_weekly_exercise_plan'),
+    path('api/get-exercise-plans', views.get_exercise_plans,
+         name='get_exercise_plans'),
 ]

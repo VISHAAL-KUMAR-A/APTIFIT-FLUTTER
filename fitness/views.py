@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -2329,6 +2329,248 @@ def update_fitness_level(request):
             return Response({
                 "message": "Fitness level updated successfully.",
                 "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+@api_view(['POST'])
+def generate_weekly_exercise_plan(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if required fields are set
+            missing_fields = []
+            if user.workout_location is None or user.workout_location == '':
+                missing_fields.append("workout_location")
+            if user.workout_duration is None or user.workout_duration == '':
+                missing_fields.append("workout_duration")
+            if user.fitness_level is None or user.fitness_level == '':
+                missing_fields.append("fitness_level")
+
+            if missing_fields:
+                return Response(
+                    {"error": f"Missing required fields: {', '.join(missing_fields)}. Please update your profile."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get user profile data for exercise plan generation
+            user_profile = {
+                "age": user.age,
+                "gender": user.gender,
+                "height": user.height,
+                "weight": user.weight,
+                "fitness_goal": user.fitness_goal,
+                "activity_level": user.activity_level,
+                "workout_location": user.workout_location,
+                "equipment_preference": user.equipment_preference,
+                "workout_duration": user.workout_duration,
+                "fitness_level": user.fitness_level
+            }
+
+            # Generate weekly exercise plan using GPT-4
+            exercise_plan = generate_gpt_exercise_plan(user_profile)
+
+            # Save the exercise plan to the database
+            ExercisePlan.objects.create(
+                user=user,
+                plan_data=exercise_plan
+            )
+
+            return Response({
+                "message": "Weekly exercise plan generated successfully.",
+                "exercise_plan": exercise_plan
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+def generate_gpt_exercise_plan(user_profile):
+    try:
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return {"error": "Exercise plan generation is not available at the moment."}
+
+        # Using project API key
+        client = openai.OpenAI(
+            api_key=api_key
+        )
+
+        # Prepare user information for context
+        context = []
+        for key, value in user_profile.items():
+            if value is not None and value != '':
+                if key == 'height':
+                    context.append(f"Height: {value} cm")
+                elif key == 'weight':
+                    context.append(f"Weight: {value} kg")
+                else:
+                    context.append(f"{key.replace('_', ' ').title()}: {value}")
+
+        user_context = ", ".join(context)
+
+        # Create prompt for GPT-4
+        system_message = (
+            "You are a professional fitness trainer creating personalized weekly exercise plans. "
+            "Create a detailed, structured exercise plan for the entire week (Monday through Sunday) based on the user's profile. "
+            "The plan should be realistic, balanced, and aligned with the user's fitness level, goals, and constraints. "
+            "For each day, provide specific exercises with sets, reps, and rest periods where applicable. "
+            "Include rest days as appropriate for the user's fitness level. "
+            "Format your response as a JSON object with days of the week as keys and structured workout details as values."
+        )
+
+        user_message = (
+            f"Create a weekly exercise plan for a person with the following profile:\n\n"
+            f"{user_context}\n\n"
+            f"Please provide a detailed, structured plan for each day of the week (Monday through Sunday) "
+            f"that is appropriate for this person's fitness level, workout location, equipment preference, and time constraints. "
+            f"For exercise days, include specific exercises, sets, reps, and rest periods. "
+            f"Include appropriate rest days based on their fitness level. "
+            f"Return the plan as a JSON object where each key is a day of the week and each value contains the workout details."
+        )
+
+        # Call GPT-4 API
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+
+        # Get the response and parse it
+        result = response.choices[0].message.content.strip()
+
+        # Try to parse the JSON from the response
+        import json
+        import re
+
+        # First try direct JSON parsing
+        try:
+            exercise_plan = json.loads(result)
+        except json.JSONDecodeError:
+            # If that fails, try to extract the JSON part using regex
+            json_match = re.search(r'({[\s\S]*})', result)
+            if json_match:
+                try:
+                    exercise_plan = json.loads(json_match.group(1))
+                except:
+                    # If all parsing fails, return a structured error message
+                    return {
+                        "error": "Could not parse the exercise plan. Please try again.",
+                        "raw_response": result
+                    }
+            else:
+                # If no JSON-like structure is found, return the raw text
+                return {
+                    "error": "Could not parse the exercise plan. Please try again.",
+                    "raw_response": result
+                }
+
+        return exercise_plan
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error generating exercise plan: {str(e)}")
+        return {
+            "error": f"Failed to generate exercise plan: {str(e)}",
+            "message": "Please try again later."
+        }
+
+
+@api_view(['POST'])
+def get_exercise_plans(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Get exercise plans for the user
+            exercise_plans = ExercisePlan.objects.filter(user=user)
+
+            # Apply pagination if specified
+            page_size = data.get('page_size', 5)
+            page = data.get('page', 1)
+
+            try:
+                page_size = int(page_size)
+                page = int(page)
+
+                if page_size <= 0 or page <= 0:
+                    raise ValueError
+
+                start = (page - 1) * page_size
+                end = start + page_size
+                exercise_plans = exercise_plans[start:end]
+
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "Invalid pagination parameters."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Serialize and return the plans
+            serializer = ExercisePlanSerializer(exercise_plans, many=True)
+            return Response({
+                "message": "Exercise plans retrieved successfully.",
+                "plans": serializer.data,
+                "page": page,
+                "page_size": page_size
             }, status=status.HTTP_200_OK)
 
         except Token.DoesNotExist:

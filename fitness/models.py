@@ -106,3 +106,13 @@ class HealthQA(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ExercisePlan(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='exercise_plans')
+    plan_data = models.JSONField()  # Stores the full weekly exercise plan
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
