@@ -2031,3 +2031,79 @@ def update_user_profile(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def update_workout_location(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if workout_location is provided
+        if 'workout_location' not in data:
+            return Response(
+                {"error": "Workout location is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if workout location is already set (can only be set once)
+            if user.workout_location is not None and user.workout_location != '':
+                return Response(
+                    {"error": "Workout location is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate workout location input
+            workout_location = data.get('workout_location').strip()
+            if not workout_location:
+                return Response(
+                    {"error": "Workout location cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed workout locations
+            valid_locations = ['At Home', 'At the GYM']
+            if workout_location not in valid_locations:
+                return Response(
+                    {"error": f"Workout location must be one of: {', '.join(valid_locations)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user workout location
+            user.workout_location = workout_location
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Workout location updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )

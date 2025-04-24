@@ -40,4 +40,6 @@ urlpatterns = [
          name='get_health_qa_history'),
     path('api/update-profile', views.update_user_profile,
          name='update_user_profile'),
+    path('api/update-workout-location', views.update_workout_location,
+         name='update_workout_location'),
 ]
