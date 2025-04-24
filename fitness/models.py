@@ -116,3 +116,15 @@ class ExercisePlan(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ExerciseTip(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='exercise_tips')
+    exercise_plan = models.ForeignKey(
+        ExercisePlan, on_delete=models.CASCADE, related_name='tips', null=True, blank=True)
+    tip_content = models.CharField(max_length=200)  # Max 2 lines, ~200 chars
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']

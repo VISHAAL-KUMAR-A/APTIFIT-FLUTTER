@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip
 from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
@@ -2578,3 +2578,220 @@ def get_exercise_plans(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def get_exercise_plan_tips(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Get the latest exercise plan
+            latest_plan = ExercisePlan.objects.filter(
+                user=user).order_by('-created_at').first()
+
+            if not latest_plan:
+                return Response(
+                    {"error": "No exercise plan found. Generate a plan first."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Generate tips based on the exercise plan
+            tips = generate_exercise_tips(user, latest_plan)
+
+            return Response({
+                "message": "Exercise plan tips retrieved successfully.",
+                "tips": tips
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+def generate_exercise_tips(user, exercise_plan):
+    try:
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return [{"tip_content": "Remember to stay hydrated throughout your workout sessions."}]
+
+        # Using project API key
+        client = openai.OpenAI(
+            api_key=api_key
+        )
+
+        # Get user profile data for context
+        user_profile = {
+            "age": user.age,
+            "gender": user.gender,
+            "fitness_goal": user.fitness_goal,
+            "fitness_level": user.fitness_level
+        }
+
+        # Create prompt for GPT
+        system_message = (
+            "You are a fitness expert providing short, practical tips for exercise plans. "
+            "Each tip must be concise (maximum 2 lines or about 100-140 characters) and specific to the user's plan. "
+            "Generate EXACTLY 4 tips that are actionable, motivational, and tailored to the user's profile and plan. "
+            "Format as a simple JSON array of strings, each string being one tip."
+        )
+
+        user_message = (
+            f"Generate 4 concise exercise tips (maximum 2 lines each) for a user with this profile: {user_profile}\n\n"
+            f"The user is following this exercise plan: {exercise_plan.plan_data}\n\n"
+            f"Return ONLY a JSON array containing 4 short tips as strings. Each tip should be actionable "
+            f"and directly relevant to this specific plan and user profile."
+        )
+
+        # Call GPT API
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        # Get the response and parse it
+        result = response.choices[0].message.content.strip()
+
+        # Parse the JSON from the response
+        import json
+        import re
+
+        try:
+            tips_list = json.loads(result)
+
+            # If not a list or more than 4 tips, adjust
+            if not isinstance(tips_list, list):
+                tips_list = [
+                    "Stay hydrated during workouts for better performance.",
+                    "Proper form is better than more repetitions. Quality over quantity.",
+                    "Schedule rest days to allow your muscles to recover and grow.",
+                    "Track your progress weekly to stay motivated and see improvements."
+                ]
+
+            # Limit to 4 tips
+            tips_list = tips_list[:4]
+
+            # Store tips in database
+            stored_tips = []
+            for tip_content in tips_list:
+                tip = ExerciseTip.objects.create(
+                    user=user,
+                    exercise_plan=exercise_plan,
+                    tip_content=tip_content
+                )
+                stored_tips.append({
+                    "id": tip.id,
+                    "tip_content": tip.tip_content,
+                    "created_at": tip.created_at
+                })
+
+            return stored_tips
+
+        except json.JSONDecodeError:
+            # If parsing fails, extract with regex or provide default tips
+            json_match = re.search(r'\[(.*)\]', result, re.DOTALL)
+            if json_match:
+                try:
+                    # Try to parse as a JSON array
+                    tips_text = "[" + json_match.group(1) + "]"
+                    tips_list = json.loads(tips_text)
+
+                    # Store tips in database
+                    stored_tips = []
+                    for tip_content in tips_list[:4]:
+                        tip = ExerciseTip.objects.create(
+                            user=user,
+                            exercise_plan=exercise_plan,
+                            tip_content=tip_content
+                        )
+                        stored_tips.append({
+                            "id": tip.id,
+                            "tip_content": tip.tip_content,
+                            "created_at": tip.created_at
+                        })
+
+                    return stored_tips
+                except:
+                    pass
+
+            # Fall back to default tips
+            default_tips = [
+                "Stay hydrated during workouts for better performance.",
+                "Proper form is better than more repetitions. Quality over quantity.",
+                "Schedule rest days to allow your muscles to recover and grow.",
+                "Track your progress weekly to stay motivated and see improvements."
+            ]
+
+            # Store default tips in database
+            stored_tips = []
+            for tip_content in default_tips:
+                tip = ExerciseTip.objects.create(
+                    user=user,
+                    exercise_plan=exercise_plan,
+                    tip_content=tip_content
+                )
+                stored_tips.append({
+                    "id": tip.id,
+                    "tip_content": tip.tip_content,
+                    "created_at": tip.created_at
+                })
+
+            return stored_tips
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error generating exercise tips: {str(e)}")
+
+        # Provide default tips
+        default_tips = [
+            "Stay hydrated during workouts for better performance.",
+            "Proper form is better than more repetitions. Quality over quantity.",
+            "Schedule rest days to allow your muscles to recover and grow.",
+            "Track your progress weekly to stay motivated and see improvements."
+        ]
+
+        # Store default tips in database
+        stored_tips = []
+        for tip_content in default_tips:
+            tip = ExerciseTip.objects.create(
+                user=user,
+                exercise_plan=exercise_plan,
+                tip_content=tip_content
+            )
+            stored_tips.append({
+                "id": tip.id,
+                "tip_content": tip.tip_content,
+                "created_at": tip.created_at
+            })
+
+        return stored_tips
