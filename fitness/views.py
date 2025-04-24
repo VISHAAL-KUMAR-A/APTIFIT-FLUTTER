@@ -1861,3 +1861,173 @@ def get_gpt_health_answer(question, user_profile, metrics_data):
         # Log the error (in a production environment)
         print(f"Error getting GPT answer: {str(e)}")
         return "Sorry, I encountered an error processing your question. Please try again later."
+
+
+@api_view(['POST'])
+def update_user_profile(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+            updated_fields = []
+
+            # Update name if provided
+            if 'name' in data:
+                user.name = data.get('name')
+                updated_fields.append('name')
+
+            # Update email if provided
+            if 'email' in data and data.get('email') != user.email:
+                # Check if email already exists
+                if User.objects.filter(email=data.get('email')).exists():
+                    return Response(
+                        {"error": "User with this email already exists."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                user.email = data.get('email')
+                updated_fields.append('email')
+
+            # Update age if provided
+            if 'age' in data:
+                try:
+                    age = int(data.get('age'))
+                    if age <= 0:
+                        return Response(
+                            {"error": "Age must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    user.age = age
+                    updated_fields.append('age')
+                except ValueError:
+                    return Response(
+                        {"error": "Age must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Update gender if provided
+            if 'gender' in data:
+                gender = data.get('gender').strip()
+                valid_genders = ['male', 'female',
+                                 'non-binary', 'other', 'prefer not to say']
+                if gender.lower() not in valid_genders:
+                    return Response(
+                        {"error": f"Gender must be one of: {', '.join(valid_genders)}"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                user.gender = gender.lower()
+                updated_fields.append('gender')
+
+            # Update height if provided
+            if 'height' in data:
+                try:
+                    unit = data.get('height_unit', 'cm').lower()
+                    if unit not in ['cm', 'in']:
+                        return Response(
+                            {"error": "Height unit must be either 'cm' or 'in'."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    height = float(data.get('height'))
+                    if height <= 0:
+                        return Response(
+                            {"error": "Height must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    # Convert inches to cm if needed
+                    if unit == 'in':
+                        height = round(height * 2.54)  # 1 inch = 2.54 cm
+                    else:
+                        height = round(height)  # Round to nearest cm
+
+                    # Optional: Add a reasonable range check
+                    if height < 50 or height > 300:
+                        return Response(
+                            {"error": "Height must be between 50 and 300 cm (19.7 and 118.1 inches)."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    user.height = height
+                    updated_fields.append('height')
+                except ValueError:
+                    return Response(
+                        {"error": "Height must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Update weight if provided
+            if 'weight' in data:
+                try:
+                    unit = data.get('weight_unit', 'kg').lower()
+                    if unit not in ['kg', 'lbs']:
+                        return Response(
+                            {"error": "Weight unit must be either 'kg' or 'lbs'."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    weight = float(data.get('weight'))
+                    if weight <= 0:
+                        return Response(
+                            {"error": "Weight must be a positive number."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    # Convert lbs to kg if needed
+                    if unit == 'lbs':
+                        # 1 lbs = 0.453592 kg
+                        weight = round(weight * 0.453592)
+                    else:
+                        weight = round(weight)  # Round to nearest kg
+
+                    # Optional: Add a reasonable range check
+                    if weight < 20 or weight > 500:
+                        return Response(
+                            {"error": "Weight must be between 20 and 500 kg (44 and 1102 lbs)."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    user.weight = weight
+                    updated_fields.append('weight')
+                except ValueError:
+                    return Response(
+                        {"error": "Weight must be a valid number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Save user if any fields were updated
+            if updated_fields:
+                user.save()
+                return Response({
+                    "message": f"Profile updated successfully. Updated fields: {', '.join(updated_fields)}",
+                    "user": UserSerializer(user).data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    "message": "No fields to update were provided.",
+                    "user": UserSerializer(user).data
+                }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )

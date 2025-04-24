@@ -38,4 +38,6 @@ urlpatterns = [
     path('api/health-question', views.health_question, name='health_question'),
     path('api/health-qa-history', views.get_health_qa_history,
          name='get_health_qa_history'),
+    path('api/update-profile', views.update_user_profile,
+         name='update_user_profile'),
 ]
