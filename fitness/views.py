@@ -2260,3 +2260,79 @@ def update_workout_duration(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def update_fitness_level(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if fitness_level is provided
+        if 'fitness_level' not in data:
+            return Response(
+                {"error": "Fitness level is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if fitness level is already set (can only be set once)
+            if user.fitness_level is not None and user.fitness_level != '':
+                return Response(
+                    {"error": "Fitness level is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate fitness level input
+            fitness_level = data.get('fitness_level').strip()
+            if not fitness_level:
+                return Response(
+                    {"error": "Fitness level cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed fitness levels
+            valid_levels = ['Beginner', 'Intermediate', 'Advanced']
+            if fitness_level not in valid_levels:
+                return Response(
+                    {"error": f"Fitness level must be one of: {', '.join(valid_levels)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user fitness level
+            user.fitness_level = fitness_level
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Fitness level updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
