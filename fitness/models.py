@@ -22,6 +22,7 @@ class User(models.Model):
     workout_location = models.CharField(max_length=50, null=True, blank=True)
     equipment_preference = models.CharField(
         max_length=50, null=True, blank=True)
+    workout_duration = models.CharField(max_length=50, null=True, blank=True)
 
     # Email verification fields
     is_verified = models.BooleanField(default=False)

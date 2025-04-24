@@ -2184,3 +2184,79 @@ def update_equipment_preference(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def update_workout_duration(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if workout_duration is provided
+        if 'workout_duration' not in data:
+            return Response(
+                {"error": "Workout duration is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if workout duration is already set (can only be set once)
+            if user.workout_duration is not None and user.workout_duration != '':
+                return Response(
+                    {"error": "Workout duration is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate workout duration input
+            workout_duration = data.get('workout_duration').strip()
+            if not workout_duration:
+                return Response(
+                    {"error": "Workout duration cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed workout durations
+            valid_durations = ['10-15 mins', '20-30 mins', '45+ mins']
+            if workout_duration not in valid_durations:
+                return Response(
+                    {"error": f"Workout duration must be one of: {', '.join(valid_durations)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user workout duration
+            user.workout_duration = workout_duration
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Workout duration updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
