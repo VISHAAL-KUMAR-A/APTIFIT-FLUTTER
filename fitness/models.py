@@ -136,7 +136,8 @@ class ExerciseMetrics(models.Model):
     date = models.DateField(default=timezone.now)
     heart_rate = models.IntegerField(null=True, blank=True)  # in bpm
     calories_burnt = models.IntegerField(null=True, blank=True)
-    exercise_time = models.IntegerField(null=True, blank=True)  # in minutes
+    exercise_time = models.CharField(
+        max_length=10, null=True, blank=True)  # in 00:00 format
     reps = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

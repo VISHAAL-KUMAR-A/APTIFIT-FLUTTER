@@ -12,6 +12,7 @@ from .utils import send_verification_email, send_password_reset_email
 import os
 import openai
 from django.conf import settings
+import re
 
 
 # Create your views here.
@@ -2800,7 +2801,7 @@ def generate_exercise_tips(user, exercise_plan):
 @api_view(['POST'])
 def record_exercise_metrics(request):
     """
-    Record exercise metrics including heart rate, calories burnt, time and reps
+    Record exercise metrics including heart rate, calories burnt, exercise time (00:00 format) and reps
     """
     # Check if the user is authenticated
     token = request.data.get('token')
@@ -2815,11 +2816,21 @@ def record_exercise_metrics(request):
     except Token.DoesNotExist:
         return Response({'error': 'Invalid token'}, status=401)
 
+    # Get exercise time and validate format
+    exercise_time = request.data.get('exercise_time')
+    if exercise_time:
+        # Optionally validate the format (should be in 00:00 format)
+        if not re.match(r'^\d{2}:\d{2}$', exercise_time):
+            return Response({
+                'status': 'error',
+                'message': 'Exercise time should be in 00:00 format'
+            }, status=400)
+
     # Extract data from the request
     data = {
         'heart_rate': request.data.get('heart_rate'),
         'calories_burnt': request.data.get('calories_burnt'),
-        'exercise_time': request.data.get('exercise_time'),
+        'exercise_time': exercise_time,
         'reps': request.data.get('reps'),
         'date': request.data.get('date', timezone.now().date())
     }
