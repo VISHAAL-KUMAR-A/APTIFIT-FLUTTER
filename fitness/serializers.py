@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics
+from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote
 from django.contrib.auth.hashers import make_password
 
 
@@ -55,3 +55,9 @@ class ExerciseMetricsSerializer(serializers.ModelSerializer):
         model = ExerciseMetrics
         fields = ['id', 'date', 'heart_rate', 'calories_burnt',
                   'exercise_time', 'reps', 'created_at']
+
+
+class WorkoutNoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkoutNote
+        fields = ['id', 'date', 'note_content', 'created_at', 'updated_at']

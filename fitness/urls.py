@@ -58,4 +58,8 @@ urlpatterns = [
          name='record_exercise_metrics'),
     path('api/get-exercise-metrics-history', views.get_exercise_metrics,
          name='get_exercise_metrics_history'),
+    path('api/add-workout-note', views.add_workout_note,
+         name='add_workout_note'),
+    path('api/get-workout-notes', views.get_workout_notes,
+         name='get_workout_notes'),
 ]

@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -2870,6 +2870,94 @@ def get_exercise_metrics(request):
     # Get all exercise metrics for the user
     metrics = ExerciseMetrics.objects.filter(user=user)
     serializer = ExerciseMetricsSerializer(metrics, many=True)
+
+    return Response({
+        'status': 'success',
+        'data': serializer.data
+    })
+
+
+@api_view(['POST'])
+def add_workout_note(request):
+    """
+    Add a workout note for the authenticated user
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Extract data from the request
+    note_content = request.data.get('note_content')
+    if not note_content:
+        return Response({
+            'status': 'error',
+            'message': 'Note content is required'
+        }, status=400)
+
+    date = request.data.get('date', timezone.now().date())
+
+    # Create and save the workout note
+    workout_note = WorkoutNote(
+        user=user,
+        date=date,
+        note_content=note_content
+    )
+    workout_note.save()
+
+    # Serialize the data for response
+    serializer = WorkoutNoteSerializer(workout_note)
+
+    return Response({
+        'status': 'success',
+        'message': 'Workout note added successfully',
+        'data': serializer.data
+    }, status=201)
+
+
+@api_view(['GET'])
+def get_workout_notes(request):
+    """
+    Get all workout notes for the authenticated user
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get optional date filter
+    date_filter = request.GET.get('date')
+
+    # Get workout notes for the user, optionally filtered by date
+    if date_filter:
+        try:
+            date_obj = datetime.strptime(date_filter, '%Y-%m-%d').date()
+            notes = WorkoutNote.objects.filter(user=user, date=date_obj)
+        except ValueError:
+            return Response({
+                'status': 'error',
+                'message': 'Invalid date format. Use YYYY-MM-DD'
+            }, status=400)
+    else:
+        notes = WorkoutNote.objects.filter(user=user)
+
+    serializer = WorkoutNoteSerializer(notes, many=True)
 
     return Response({
         'status': 'success',

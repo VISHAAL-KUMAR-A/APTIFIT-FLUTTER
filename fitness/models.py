@@ -143,3 +143,15 @@ class ExerciseMetrics(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class WorkoutNote(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='workout_notes')
+    date = models.DateField(default=timezone.now)
+    note_content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
