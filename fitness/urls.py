@@ -42,4 +42,6 @@ urlpatterns = [
          name='update_user_profile'),
     path('api/update-workout-location', views.update_workout_location,
          name='update_workout_location'),
+    path('api/update-equipment-preference',
+         views.update_equipment_preference, name='update_equipment_preference'),
 ]

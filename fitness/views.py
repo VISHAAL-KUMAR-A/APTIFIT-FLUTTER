@@ -2107,3 +2107,80 @@ def update_workout_location(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def update_equipment_preference(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Check if equipment_preference is provided
+        if 'equipment_preference' not in data:
+            return Response(
+                {"error": "Equipment preference is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Check if equipment preference is already set (can only be set once)
+            if user.equipment_preference is not None and user.equipment_preference != '':
+                return Response(
+                    {"error": "Equipment preference is already set and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate equipment preference input
+            equipment_preference = data.get('equipment_preference').strip()
+            if not equipment_preference:
+                return Response(
+                    {"error": "Equipment preference cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate allowed equipment preferences
+            valid_preferences = ['Yoga Mat', 'Dumbbells',
+                                 'Resistance Bands', 'No Equipment']
+            if equipment_preference not in valid_preferences:
+                return Response(
+                    {"error": f"Equipment preference must be one of: {', '.join(valid_preferences)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update user equipment preference
+            user.equipment_preference = equipment_preference
+            user.save()
+
+            # Return updated user data
+            serializer = UserSerializer(user)
+            return Response({
+                "message": "Equipment preference updated successfully.",
+                "user": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
