@@ -64,4 +64,8 @@ urlpatterns = [
          name='get_workout_notes'),
     path('api/update-preferences', views.update_preferences,
          name='update_preferences'),
+    path('api/generate-diet-plan', views.generate_weekly_diet_plan,
+         name='generate_weekly_diet_plan'),
+    path('api/get-diet-plans', views.get_diet_plans,
+         name='get_diet_plans'),
 ]

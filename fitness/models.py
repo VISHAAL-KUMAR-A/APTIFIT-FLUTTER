@@ -155,3 +155,13 @@ class WorkoutNote(models.Model):
 
     class Meta:
         ordering = ['-date', '-created_at']
+
+
+class DietPlan(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='diet_plans')
+    plan_data = models.JSONField()  # Stores the full weekly diet plan
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
