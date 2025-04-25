@@ -3259,7 +3259,7 @@ def get_diet_plans(request):
 @api_view(['POST'])
 def update_diet_plan(request):
     """
-    Update an existing diet plan
+    Update a specific part of an existing diet plan
     """
     # Check if the user is authenticated
     token = request.data.get('token')
@@ -3282,20 +3282,75 @@ def update_diet_plan(request):
             'message': 'Diet plan ID is required'
         }, status=400)
 
-    # Get updated plan data
-    updated_plan_data = request.data.get('plan_data')
-    if not updated_plan_data:
+    # Get the day and meal type to update
+    day = request.data.get('day')
+    meal_type = request.data.get('meal_type')
+    meal_data = request.data.get('meal_data')
+
+    if not day or not meal_type or not meal_data:
         return Response({
             'status': 'error',
-            'message': 'Plan data is required'
+            'message': 'Day, meal_type, and meal_data are required'
         }, status=400)
 
     try:
         # Find the diet plan
         diet_plan = DietPlan.objects.get(id=diet_plan_id, user=user)
 
-        # Update the plan data
-        diet_plan.plan_data = updated_plan_data
+        # Get the current plan data
+        current_plan_data = diet_plan.plan_data
+
+        # Check if the day exists in the current plan
+        if day not in current_plan_data:
+            return Response({
+                'status': 'error',
+                'message': f'Day "{day}" not found in diet plan'
+            }, status=400)
+
+        # Handle raw_plan case (when plan is stored as string in raw_plan field)
+        if 'raw_plan' in current_plan_data:
+            import json
+            try:
+                # Try to parse the raw_plan as JSON
+                plan_content = json.loads(current_plan_data['raw_plan'])
+
+                # Check if the day exists in the parsed plan
+                if day not in plan_content:
+                    return Response({
+                        'status': 'error',
+                        'message': f'Day "{day}" not found in diet plan'
+                    }, status=400)
+
+                # Update the specific meal
+                if meal_type not in plan_content[day]:
+                    return Response({
+                        'status': 'error',
+                        'message': f'Meal type "{meal_type}" not found for {day}'
+                    }, status=400)
+
+                # Update the meal data
+                plan_content[day][meal_type] = meal_data
+
+                # Update the raw_plan with modified data
+                current_plan_data['raw_plan'] = json.dumps(plan_content)
+            except json.JSONDecodeError:
+                return Response({
+                    'status': 'error',
+                    'message': 'Could not parse raw_plan data. It may be in an invalid format.'
+                }, status=500)
+        else:
+            # Regular plan structure (direct JSON)
+            if meal_type not in current_plan_data[day]:
+                return Response({
+                    'status': 'error',
+                    'message': f'Meal type "{meal_type}" not found for {day}'
+                }, status=400)
+
+            # Update the specific meal
+            current_plan_data[day][meal_type] = meal_data
+
+        # Save the updated plan data
+        diet_plan.plan_data = current_plan_data
         diet_plan.save()
 
         # Serialize for response
@@ -3303,7 +3358,7 @@ def update_diet_plan(request):
 
         return Response({
             'status': 'success',
-            'message': 'Diet plan updated successfully',
+            'message': f'Successfully updated {meal_type} for {day}',
             'data': serializer.data
         })
     except DietPlan.DoesNotExist:
