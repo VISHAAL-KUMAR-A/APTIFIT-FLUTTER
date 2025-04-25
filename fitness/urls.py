@@ -68,4 +68,8 @@ urlpatterns = [
          name='generate_weekly_diet_plan'),
     path('api/get-diet-plans', views.get_diet_plans,
          name='get_diet_plans'),
+    path('api/update-diet-plan', views.update_diet_plan,
+         name='update_diet_plan'),
+    path('api/delete-diet-plan', views.delete_diet_plan,
+         name='delete_diet_plan'),
 ]

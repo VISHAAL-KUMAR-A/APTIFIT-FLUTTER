@@ -3254,3 +3254,114 @@ def get_diet_plans(request):
         'status': 'success',
         'data': serializer.data
     })
+
+
+@api_view(['POST'])
+def update_diet_plan(request):
+    """
+    Update an existing diet plan
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get diet plan ID from request
+    diet_plan_id = request.data.get('diet_plan_id')
+    if not diet_plan_id:
+        return Response({
+            'status': 'error',
+            'message': 'Diet plan ID is required'
+        }, status=400)
+
+    # Get updated plan data
+    updated_plan_data = request.data.get('plan_data')
+    if not updated_plan_data:
+        return Response({
+            'status': 'error',
+            'message': 'Plan data is required'
+        }, status=400)
+
+    try:
+        # Find the diet plan
+        diet_plan = DietPlan.objects.get(id=diet_plan_id, user=user)
+
+        # Update the plan data
+        diet_plan.plan_data = updated_plan_data
+        diet_plan.save()
+
+        # Serialize for response
+        serializer = DietPlanSerializer(diet_plan)
+
+        return Response({
+            'status': 'success',
+            'message': 'Diet plan updated successfully',
+            'data': serializer.data
+        })
+    except DietPlan.DoesNotExist:
+        return Response({
+            'status': 'error',
+            'message': 'Diet plan not found or you do not have permission to update it'
+        }, status=404)
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': f'Error updating diet plan: {str(e)}'
+        }, status=500)
+
+
+@api_view(['POST'])
+def delete_diet_plan(request):
+    """
+    Delete an existing diet plan
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get diet plan ID from request
+    diet_plan_id = request.data.get('diet_plan_id')
+    if not diet_plan_id:
+        return Response({
+            'status': 'error',
+            'message': 'Diet plan ID is required'
+        }, status=400)
+
+    try:
+        # Find the diet plan
+        diet_plan = DietPlan.objects.get(id=diet_plan_id, user=user)
+
+        # Delete the plan
+        diet_plan.delete()
+
+        return Response({
+            'status': 'success',
+            'message': 'Diet plan deleted successfully'
+        })
+    except DietPlan.DoesNotExist:
+        return Response({
+            'status': 'error',
+            'message': 'Diet plan not found or you do not have permission to delete it'
+        }, status=404)
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': f'Error deleting diet plan: {str(e)}'
+        }, status=500)
