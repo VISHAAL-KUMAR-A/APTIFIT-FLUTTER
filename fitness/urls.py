@@ -8,6 +8,8 @@ urlpatterns = [
     path('api/logout', views.logout_user, name='logout_user'),
     path('api/verify-email/<str:token>',
          views.verify_email, name='verify_email'),
+    path('api/verify-email-code', views.verify_email_code,
+         name='verify_email_code'),
     path('api/resend-verification', views.resend_verification,
          name='resend_verification'),
     path('api/forgot-password', views.forgot_password, name='forgot_password'),

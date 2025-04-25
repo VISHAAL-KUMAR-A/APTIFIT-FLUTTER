@@ -3420,3 +3420,61 @@ def delete_diet_plan(request):
             'status': 'error',
             'message': f'Error deleting diet plan: {str(e)}'
         }, status=500)
+
+
+@api_view(['POST'])
+def verify_email_code(request):
+    """Verify user's email with verification code"""
+    try:
+        data = request.data
+        email = data.get('email')
+        verification_code = data.get('verification_code')
+
+        if not email or not verification_code:
+            return Response({
+                'status': 'error',
+                'message': 'Email and verification code are required'
+            }, status=400)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'User with this email does not exist'
+            }, status=404)
+
+        if user.is_verified:
+            return Response({
+                'status': 'success',
+                'message': 'Email already verified'
+            })
+
+        if not user.is_token_valid():
+            return Response({
+                'status': 'error',
+                'message': 'Verification code has expired. Please request a new one.'
+            }, status=400)
+
+        if user.verification_code != verification_code:
+            return Response({
+                'status': 'error',
+                'message': 'Invalid verification code'
+            }, status=400)
+
+        user.is_verified = True
+        user.verification_token = None
+        user.verification_token_created_at = None
+        user.verification_code = None
+        user.save()
+
+        return Response({
+            'status': 'success',
+            'message': 'Email verified successfully'
+        })
+
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)

@@ -2,6 +2,7 @@ from django.db import models
 import uuid
 from datetime import datetime, timedelta
 from django.utils import timezone
+import random
 
 # Create your models here.
 
@@ -30,6 +31,7 @@ class User(models.Model):
     verification_token = models.CharField(
         max_length=255, null=True, blank=True)
     verification_token_created_at = models.DateTimeField(null=True, blank=True)
+    verification_code = models.CharField(max_length=5, null=True, blank=True)
 
     # Password reset fields
     reset_password_token = models.CharField(
@@ -40,8 +42,11 @@ class User(models.Model):
     def generate_verification_token(self):
         self.verification_token = str(uuid.uuid4())
         self.verification_token_created_at = timezone.now()
+        # Generate a random 5-digit verification code
+        self.verification_code = ''.join(
+            [str(random.randint(0, 9)) for _ in range(5)])
         self.save()
-        return self.verification_token
+        return self.verification_token, self.verification_code
 
     def is_token_valid(self):
         # Token is valid for 24 hours
