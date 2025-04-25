@@ -2963,3 +2963,59 @@ def get_workout_notes(request):
         'status': 'success',
         'data': serializer.data
     })
+
+
+@api_view(['POST'])
+def update_preferences(request):
+    """
+    Update multiple user preferences at once
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Fields that can be updated
+    updatable_fields = [
+        'diet_preference',
+        'fitness_goal',
+        'activity_level',
+        'reminder_mode',
+        'workout_location',
+        'workout_duration',
+        'fitness_level'
+    ]
+
+    # Track which fields were updated
+    updated_fields = []
+
+    # Update each field if provided in the request
+    for field in updatable_fields:
+        if field in request.data:
+            value = request.data.get(field)
+            # Validate value (you may want to add specific validation for each field)
+            if value:
+                setattr(user, field, value)
+                updated_fields.append(field)
+
+    # Save the user if any fields were updated
+    if updated_fields:
+        user.save()
+        return Response({
+            'status': 'success',
+            'message': f'Updated user preferences: {", ".join(updated_fields)}',
+            'updated_fields': updated_fields
+        })
+    else:
+        return Response({
+            'status': 'error',
+            'message': 'No valid fields provided for update'
+        }, status=400)

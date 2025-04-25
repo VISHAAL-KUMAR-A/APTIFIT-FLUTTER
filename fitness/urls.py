@@ -62,4 +62,6 @@ urlpatterns = [
          name='add_workout_note'),
     path('api/get-workout-notes', views.get_workout_notes,
          name='get_workout_notes'),
+    path('api/update-preferences', views.update_preferences,
+         name='update_preferences'),
 ]
