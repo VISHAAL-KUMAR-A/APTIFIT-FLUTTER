@@ -3478,3 +3478,120 @@ def verify_email_code(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+
+@api_view(['POST'])
+def concise_health_answer(request):
+    try:
+        # Get user token and validate
+        token = request.data.get('token')
+        if not token:
+            return Response({'error': 'Authentication token is required'}, status=401)
+
+        # Validate token
+        token_obj = Token.objects.filter(token=token).first()
+        if not token_obj or not token_obj.is_valid():
+            return Response({'error': 'Invalid or expired token'}, status=401)
+
+        user = token_obj.user
+
+        # Get question from request
+        question = request.data.get('question')
+        if not question:
+            return Response({'error': 'Question is required'}, status=400)
+
+        # Get user profile and metrics data for context
+        user_profile = {
+            'age': user.age,
+            'gender': user.gender,
+            'height': user.height,
+            'weight': user.weight,
+            'fitness_goal': user.fitness_goal,
+            'activity_level': user.activity_level,
+            'diet_preference': user.diet_preference
+        }
+
+        metrics = FitnessMetrics.objects.filter(
+            user=user).order_by('-date').first()
+        metrics_data = {}
+        if metrics:
+            metrics_data = {
+                'heart_rate': metrics.heart_rate,
+                'steps': metrics.steps,
+                'calories': metrics.calories,
+                'sleep_hours': metrics.sleep_hours
+            }
+
+        # Get concise answer
+        answer = get_concise_health_answer(
+            question, user_profile, metrics_data)
+
+        # Save the Q&A to history
+        HealthQA.objects.create(
+            user=user,
+            question=question,
+            answer=answer
+        )
+
+        return Response({
+            'question': question,
+            'answer': answer
+        })
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+def get_concise_health_answer(question, user_profile, metrics_data):
+    # Format the prompt to ensure a 3-sentence response
+    prompt = f"""
+    You are a health and fitness expert. Answer the following health, exercise, or medical question in EXACTLY 3 sentences - no more, no less.
+    Make your answer informative, accurate, and concise.
+    
+    User profile: {user_profile}
+    Recent metrics: {metrics_data}
+    
+    Question: {question}
+    
+    Your 3-sentence answer:
+    """
+
+    try:
+        # Import OpenAI client and load API key from environment
+        from openai import OpenAI
+        import os
+
+        client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+
+        # Use the correct client API format
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a health and fitness expert. You always respond with exactly 3 sentences."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.7
+        )
+
+        # Extract the content using the correct response format
+        answer = response.choices[0].message.content.strip()
+
+        # Ensure we have exactly 3 sentences
+        sentences = answer.split('.')
+        valid_sentences = [s.strip() + '.' for s in sentences if s.strip()]
+
+        if len(valid_sentences) > 3:
+            return ''.join(valid_sentences[:3])
+        elif len(valid_sentences) < 3:
+            # This shouldn't happen with proper prompting, but just in case
+            return answer + ' This completes your three-sentence answer.'
+        else:
+            return ''.join(valid_sentences)
+
+    except Exception as e:
+        # Include more detailed error information for debugging
+        import traceback
+        print(f"OpenAI API Error: {str(e)}")
+        print(traceback.format_exc())
+        return f"Sorry, I couldn't generate an answer at this time. Please try again later. This is a technical issue that will be resolved soon."
