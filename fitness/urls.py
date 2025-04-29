@@ -77,4 +77,5 @@ urlpatterns = [
     path('api/concise-health-answer', views.concise_health_answer,
          name='concise_health_answer'),
     path('api/set-food-culture', views.set_food_culture, name='set_food_culture'),
+    path('api/set-user-country', views.set_user_country, name='set_user_country'),
 ]

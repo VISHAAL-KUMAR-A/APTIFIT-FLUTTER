@@ -3628,3 +3628,35 @@ def set_food_culture(request):
     user.save()
 
     return JsonResponse({'success': True, 'message': 'Food culture set successfully'})
+
+
+@api_view(['POST'])
+def set_user_country(request):
+    # Extract the token from the request body
+    token_string = request.data.get('token')
+    if not token_string:
+        return JsonResponse({'error': 'Authentication token is required'}, status=400)
+
+    # Validate the token
+    try:
+        token = Token.objects.get(token=token_string)
+        if not token.is_valid():
+            return JsonResponse({'error': 'Token has expired'}, status=401)
+        user = token.user
+    except Token.DoesNotExist:
+        return JsonResponse({'error': 'Invalid token'}, status=401)
+
+    # Check if the user has already set their country
+    if user.country is not None and user.country != '':
+        return JsonResponse({'error': 'Country has already been set'}, status=400)
+
+    # Get the country from the request
+    country = request.data.get('country')
+    if not country:
+        return JsonResponse({'error': 'Country is required'}, status=400)
+
+    # Update the user's country
+    user.country = country
+    user.save()
+
+    return JsonResponse({'success': True, 'message': 'Country set successfully'})
