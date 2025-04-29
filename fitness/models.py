@@ -23,6 +23,8 @@ class User(models.Model):
     food_culture = models.CharField(max_length=100, null=True, blank=True)
     country = models.CharField(max_length=100, null=True, blank=True)
     food_openness = models.IntegerField(null=True, blank=True)  # Scale of 1-5
+    # Mild, Medium, Spicy, Very Spicy
+    spice_preference = models.CharField(max_length=20, null=True, blank=True)
     workout_location = models.CharField(max_length=50, null=True, blank=True)
     equipment_preference = models.CharField(
         max_length=50, null=True, blank=True)

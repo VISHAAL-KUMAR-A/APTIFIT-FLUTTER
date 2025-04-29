@@ -3701,3 +3701,46 @@ def set_food_openness(request):
         'message': 'Food openness set successfully',
         'food_openness': food_openness
     })
+
+
+@api_view(['POST'])
+def set_spice_preference(request):
+    # Extract the token from the request body
+    token_string = request.data.get('token')
+    if not token_string:
+        return JsonResponse({'error': 'Authentication token is required'}, status=400)
+
+    # Validate the token
+    try:
+        token = Token.objects.get(token=token_string)
+        if not token.is_valid():
+            return JsonResponse({'error': 'Token has expired'}, status=401)
+        user = token.user
+    except Token.DoesNotExist:
+        return JsonResponse({'error': 'Invalid token'}, status=401)
+
+    # Check if the user has already set their spice preference
+    if user.spice_preference is not None and user.spice_preference != '':
+        return JsonResponse({'error': 'Spice preference has already been set'}, status=400)
+
+    # Get the spice preference from the request
+    spice_preference = request.data.get('spice_preference')
+    if not spice_preference:
+        return JsonResponse({'error': 'Spice preference is required'}, status=400)
+
+    # Validate the spice preference (must be one of the allowed values)
+    allowed_values = ['Mild', 'Medium', 'Spicy', 'Very Spicy']
+    if spice_preference not in allowed_values:
+        return JsonResponse({
+            'error': f'Spice preference must be one of: {", ".join(allowed_values)}'
+        }, status=400)
+
+    # Update the user's spice preference
+    user.spice_preference = spice_preference
+    user.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Spice preference set successfully',
+        'spice_preference': spice_preference
+    })

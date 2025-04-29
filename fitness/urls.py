@@ -80,4 +80,6 @@ urlpatterns = [
     path('api/set-user-country', views.set_user_country, name='set_user_country'),
     path('api/set-food-openness', views.set_food_openness,
          name='set_food_openness'),
+    path('api/set-spice-preference', views.set_spice_preference,
+         name='set_spice_preference'),
 ]
