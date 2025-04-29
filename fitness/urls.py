@@ -82,4 +82,6 @@ urlpatterns = [
          name='set_food_openness'),
     path('api/set-spice-preference', views.set_spice_preference,
          name='set_spice_preference'),
+    path('api/set-allergies-restrictions',
+         views.set_allergies_restrictions, name='set_allergies_restrictions'),
 ]

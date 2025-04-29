@@ -3744,3 +3744,39 @@ def set_spice_preference(request):
         'message': 'Spice preference set successfully',
         'spice_preference': spice_preference
     })
+
+
+@api_view(['POST'])
+def set_allergies_restrictions(request):
+    # Extract the token from the request body
+    token_string = request.data.get('token')
+    if not token_string:
+        return JsonResponse({'error': 'Authentication token is required'}, status=400)
+
+    # Validate the token
+    try:
+        token = Token.objects.get(token=token_string)
+        if not token.is_valid():
+            return JsonResponse({'error': 'Token has expired'}, status=401)
+        user = token.user
+    except Token.DoesNotExist:
+        return JsonResponse({'error': 'Invalid token'}, status=401)
+
+    # Check if the user has already set their allergies/restrictions
+    if user.allergies_restrictions is not None and user.allergies_restrictions != '':
+        return JsonResponse({'error': 'Allergies and food restrictions have already been set'}, status=400)
+
+    # Get the allergies/restrictions from the request
+    allergies_restrictions = request.data.get('allergies_restrictions')
+    if allergies_restrictions is None:
+        return JsonResponse({'error': 'Allergies or food restrictions information is required'}, status=400)
+
+    # Update the user's allergies/restrictions
+    user.allergies_restrictions = allergies_restrictions
+    user.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Allergies and food restrictions set successfully',
+        'allergies_restrictions': allergies_restrictions
+    })

@@ -25,6 +25,8 @@ class User(models.Model):
     food_openness = models.IntegerField(null=True, blank=True)  # Scale of 1-5
     # Mild, Medium, Spicy, Very Spicy
     spice_preference = models.CharField(max_length=20, null=True, blank=True)
+    allergies_restrictions = models.TextField(
+        null=True, blank=True)  # Store allergies and restrictions
     workout_location = models.CharField(max_length=50, null=True, blank=True)
     equipment_preference = models.CharField(
         max_length=50, null=True, blank=True)
