@@ -13,6 +13,7 @@ import os
 import openai
 from django.conf import settings
 import re
+from django.http import JsonResponse
 
 
 # Create your views here.
@@ -3595,3 +3596,35 @@ def get_concise_health_answer(question, user_profile, metrics_data):
         print(f"OpenAI API Error: {str(e)}")
         print(traceback.format_exc())
         return f"Sorry, I couldn't generate an answer at this time. Please try again later. This is a technical issue that will be resolved soon."
+
+
+@api_view(['POST'])
+def set_food_culture(request):
+    # Extract the token from the request body
+    token_string = request.data.get('token')
+    if not token_string:
+        return JsonResponse({'error': 'Authentication token is required'}, status=400)
+
+    # Validate the token
+    try:
+        token = Token.objects.get(token=token_string)
+        if not token.is_valid():
+            return JsonResponse({'error': 'Token has expired'}, status=401)
+        user = token.user
+    except Token.DoesNotExist:
+        return JsonResponse({'error': 'Invalid token'}, status=401)
+
+    # Check if the user has already set their food culture
+    if user.food_culture is not None and user.food_culture != '':
+        return JsonResponse({'error': 'Food culture has already been set'}, status=400)
+
+    # Get the food culture from the request
+    food_culture = request.data.get('food_culture')
+    if not food_culture:
+        return JsonResponse({'error': 'Food culture is required'}, status=400)
+
+    # Update the user's food culture
+    user.food_culture = food_culture
+    user.save()
+
+    return JsonResponse({'success': True, 'message': 'Food culture set successfully'})

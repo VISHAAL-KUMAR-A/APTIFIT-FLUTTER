@@ -76,4 +76,5 @@ urlpatterns = [
          name='delete_diet_plan'),
     path('api/concise-health-answer', views.concise_health_answer,
          name='concise_health_answer'),
+    path('api/set-food-culture', views.set_food_culture, name='set_food_culture'),
 ]

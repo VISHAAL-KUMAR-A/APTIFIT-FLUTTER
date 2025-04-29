@@ -20,6 +20,7 @@ class User(models.Model):
     activity_level = models.CharField(max_length=50, null=True, blank=True)
     reminder_mode = models.CharField(max_length=50, null=True, blank=True)
     diet_preference = models.CharField(max_length=50, null=True, blank=True)
+    food_culture = models.CharField(max_length=100, null=True, blank=True)
     workout_location = models.CharField(max_length=50, null=True, blank=True)
     equipment_preference = models.CharField(
         max_length=50, null=True, blank=True)
