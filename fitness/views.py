@@ -3024,209 +3024,181 @@ def update_preferences(request):
 
 @api_view(['POST'])
 def generate_weekly_diet_plan(request):
-    """
-    Generate a weekly diet plan based on user's profile and preferences
-    """
-    # Check if the user is authenticated
+    # Extract the token from the request body
     token = request.data.get('token')
-    if not token:
-        return Response({'error': 'Authentication token is required'}, status=401)
-
-    try:
-        token_obj = Token.objects.get(token=token)
-        if not token_obj.is_valid():
-            return Response({'error': 'Token has expired'}, status=401)
-        user = token_obj.user
-    except Token.DoesNotExist:
-        return Response({'error': 'Invalid token'}, status=401)
-
-    # Calculate BMI if it doesn't exist yet
-    if user.height and user.weight:
-        height_m = user.height / 100  # Convert cm to meters
-        bmi = user.weight / (height_m * height_m)
-    else:
-        bmi = None
-
-    # Get additional parameters (optional)
     specific_needs = request.data.get('specific_needs', '')
-    allergies = request.data.get('allergies', '')
 
-    # Generate diet plan
-    diet_plan = generate_gpt_diet_plan(user, bmi, specific_needs, allergies)
+    # Validate the token
+    token_obj = Token.objects.filter(token=token).first()
+    if not token_obj or not token_obj.is_valid():
+        return Response({'error': 'Invalid or expired token'}, status=401)
 
-    if diet_plan:
-        # Save to database
-        diet_plan_obj = DietPlan(
-            user=user,
-            plan_data=diet_plan
-        )
-        diet_plan_obj.save()
+    # Get the user from the token
+    user = token_obj.user
 
-        # Serialize for response
-        serializer = DietPlanSerializer(diet_plan_obj)
+    # Calculate BMI for better diet recommendations
+    bmi = None
+    if user.height and user.weight:
+        height_m = user.height / 100  # Convert cm to m
+        bmi = user.weight / (height_m * height_m)
 
-        return Response({
-            'status': 'success',
-            'message': 'Weekly diet plan generated successfully',
-            'data': serializer.data
-        })
-    else:
-        return Response({
-            'status': 'error',
-            'message': 'Failed to generate diet plan. Please try again.'
-        }, status=500)
+    # Get the user's allergies and restrictions
+    allergies = user.allergies_restrictions or ''
+
+    # Generate a diet plan using GPT
+    plan = generate_gpt_diet_plan(user, bmi, specific_needs, allergies)
+
+    # Create a new DietPlan object
+    diet_plan = DietPlan.objects.create(
+        user=user,
+        plan_data=plan
+    )
+
+    # Return the diet plan
+    return Response({
+        'success': True,
+        'diet_plan': DietPlanSerializer(diet_plan).data
+    })
 
 
 def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
+    # Create a user profile for the prompt
+    user_profile = {
+        'age': user.age,
+        'gender': user.gender,
+        'height': user.height,
+        'weight': user.weight,
+        'fitness_goal': user.fitness_goal,
+        'diet_preference': user.diet_preference,
+        'food_culture': user.food_culture,
+        'country': user.country,
+        'food_openness': user.food_openness,  # Scale of 1-5
+        'spice_preference': user.spice_preference,
+        'allergies_restrictions': allergies
+    }
+
+    # Create a detailed prompt for OpenAI
+    prompt = f"""
+    Generate a detailed weekly diet plan for a user with the following profile:
+    
+    Age: {user_profile['age'] or 'Not specified'}
+    Gender: {user_profile['gender'] or 'Not specified'}
+    Height: {user_profile['height'] or 'Not specified'} cm
+    Weight: {user_profile['weight'] or 'Not specified'} kg
+    BMI: {bmi if bmi else 'Not calculated'}
+    Fitness Goal: {user_profile['fitness_goal'] or 'Not specified'}
+    Diet Preference: {user_profile['diet_preference'] or 'Not specified'}
+    Food Culture: {user_profile['food_culture'] or 'Not specified'}
+    Country: {user_profile['country'] or 'Not specified'}
+    Food Openness (1-5 scale): {user_profile['food_openness'] or 'Not specified'}
+    Spice Preference: {user_profile['spice_preference'] or 'Not specified'}
+    Allergies/Restrictions: {user_profile['allergies_restrictions'] or 'None'}
+    
+    Additional Specific Needs: {specific_needs}
+    
+    Based on this profile, create a detailed 7-day diet plan with 3 meals and 2 snacks per day.
+    
+    Please consider the user's food culture, country, food openness level, spice preference, and allergies/restrictions.
+    If they have a specific food culture or country, include traditional and appropriate foods from that culture.
+    Adjust spice levels according to their preference.
+    If food openness is low (1-2), stick to familiar foods; if high (4-5), include more adventurous options.
+    Strictly avoid any foods mentioned in allergies/restrictions.
+    
+    Format the response as a valid JSON object with the following structure:
+    {{
+      "overview": "Brief overview of the diet plan and its benefits",
+      "daily_calories": "Estimated daily caloric intake",
+      "macros": {{
+        "protein": "X% (Xg)",
+        "carbs": "X% (Xg)",
+        "fats": "X% (Xg)"
+      }},
+      "days": [
+        {{
+          "day": "Monday",
+          "meals": [
+            {{
+              "type": "Breakfast",
+              "meal": "Description",
+              "calories": "Approximate calories"
+            }},
+            {{
+              "type": "Lunch",
+              "meal": "Description",
+              "calories": "Approximate calories"
+            }},
+            {{
+              "type": "Dinner",
+              "meal": "Description",
+              "calories": "Approximate calories"
+            }},
+            {{
+              "type": "Snack 1",
+              "meal": "Description",
+              "calories": "Approximate calories"
+            }},
+            {{
+              "type": "Snack 2",
+              "meal": "Description",
+              "calories": "Approximate calories"
+            }}
+          ]
+        }}
+      ],
+      "tips": [
+        "Tip 1",
+        "Tip 2",
+        "Tip 3"
+      ]
+    }}
+    
+    Important: Use the days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) instead of Day 1, Day 2, etc. Include all 7 days in the "days" array with the same structure as shown above. Make sure the JSON is valid with no comments or trailing commas. The response must be a properly formatted JSON object that can be parsed.
     """
-    Use OpenAI's GPT-4 to generate a diet plan based on user profile
-    """
+
     try:
-        # Get the OpenAI API key directly from environment
-        openai_api_key = os.getenv('OPENAI_API_KEY')
+        # Import the OpenAI client
+        from openai import OpenAI
+        client = OpenAI()  # This will use your OPENAI_API_KEY environment variable
 
-        if not openai_api_key:
-            print("Error: OpenAI API key not found in environment variables")
-            return None
-
-        # Construct user profile information
-        user_profile = {
-            'age': user.age if user.age else 'unknown',
-            'gender': user.gender if user.gender else 'unknown',
-            'height': f"{user.height} cm" if user.height else 'unknown',
-            'weight': f"{user.weight} kg" if user.weight else 'unknown',
-            'bmi': f"{bmi:.1f}" if bmi else 'unknown',
-            'fitness_goal': user.fitness_goal if user.fitness_goal else 'general fitness',
-            'activity_level': user.activity_level if user.activity_level else 'moderate',
-            'diet_preference': user.diet_preference if user.diet_preference else 'no specific preference',
-        }
-
-        # For BMR calculation (if needed)
-        bmr = None
-        if user.gender and user.age and user.height and user.weight:
-            if user.gender.lower() == 'male':
-                bmr = 88.362 + (13.397 * user.weight) + \
-                    (4.799 * user.height) - (5.677 * user.age)
-            elif user.gender.lower() == 'female':
-                bmr = 447.593 + (9.247 * user.weight) + \
-                    (3.098 * user.height) - (4.330 * user.age)
-
-            user_profile['bmr'] = f"{bmr:.0f} calories/day" if bmr else 'unknown'
-
-        # Format the prompt for GPT-4 - with clearer instructions about JSON format
-        prompt = f"""
-        I need to create a personalized 7-day diet plan for a {user_profile['gender']}, {user_profile['age']} years old.
-        
-        User Profile:
-        - Height: {user_profile['height']}
-        - Weight: {user_profile['weight']}
-        - BMI: {user_profile['bmi']}
-        - BMR: {user_profile.get('bmr', 'unknown')}
-        - Fitness Goal: {user_profile['fitness_goal']}
-        - Activity Level: {user_profile['activity_level']}
-        - Diet Preference: {user_profile['diet_preference']}
-        """
-
-        if specific_needs:
-            prompt += f"- Specific Needs: {specific_needs}\n"
-
-        if allergies:
-            prompt += f"- Allergies/Intolerances: {allergies}\n"
-
-        prompt += """
-        Please create a detailed 7-day diet plan organized by days of the week (Monday to Sunday).
-        
-        IMPORTANT: You must provide a complete plan for ALL seven days, not just for Monday.
-        
-        For each day, include:
-        1. Breakfast
-        2. Morning Snack
-        3. Lunch
-        4. Afternoon Snack
-        5. Dinner
-        6. Evening Snack (optional)
-        
-        For each meal, include:
-        - Specific food items
-        - Approximate portion sizes
-        - Estimated calorie count per meal
-        - Key nutrients provided
-        
-        Also include:
-        - Daily water intake recommendation
-        - Total daily calorie target
-        - Macronutrient breakdown (protein, carbs, fats)
-        - Brief explanation of how this plan supports the user's fitness goals
-        
-        Format the response as a JSON object with this exact structure:
-        {
-          "Monday": {
-            "Breakfast": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "MorningSnack": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "Lunch": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "AfternoonSnack": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "Dinner": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "EveningSnack": {"food": "", "portion": "", "calories": 0, "nutrients": ""},
-            "WaterIntake": "",
-            "TotalCalories": 0,
-            "MacronutrientBreakdown": {"Protein": "", "Carbs": "", "Fats": ""},
-            "FitnessGoalSupport": ""
-          },
-          "Tuesday": {...same structure...},
-          "Wednesday": {...same structure...},
-          "Thursday": {...same structure...},
-          "Friday": {...same structure...},
-          "Saturday": {...same structure...},
-          "Sunday": {...same structure...}
-        }
-        
-        Provide the COMPLETE JSON for all days without using ellipses (...) or other placeholders. Do not include newlines or escape characters.
-        """
-
-        # Call OpenAI API with direct API key and increased tokens
-        client = openai.OpenAI(api_key=openai_api_key)
+        # Create a chat completion using the new API format
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a certified nutritionist and fitness expert. Create personalized diet plans based on individual profiles."},
+                {"role": "system", "content": "You are a professional nutritionist and dietitian who returns valid JSON responses."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=4000,  # Increased token limit
-            temperature=0.7
+            temperature=0.7,
+            max_tokens=3000
         )
 
-        # Parse the response
-        diet_plan_text = response.choices[0].message.content
+        # Extract the response text (new API format)
+        response_text = response.choices[0].message.content.strip()
 
-        # Extract JSON from the response
+        # Parse JSON from the response
         import json
-        import re
 
-        # Try to find and parse JSON content
-        json_match = re.search(r'```json\n(.*?)\n```',
-                               diet_plan_text, re.DOTALL)
-        if json_match:
-            json_content = json_match.group(1)
-            # Clean up the JSON string - remove newlines and unnecessary escapes
-            json_content = json_content.replace('\n', ' ').replace('\\', '')
-            diet_plan_json = json.loads(json_content)
-        else:
-            try:
-                # Clean up the JSON string - remove newlines and unnecessary escapes
-                diet_plan_text = diet_plan_text.replace(
-                    '\n', ' ').replace('\\', '')
-                diet_plan_json = json.loads(diet_plan_text)
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error: {str(e)}")
-                # If not valid JSON, return as text but without newlines
-                diet_plan_json = {
-                    "raw_plan": diet_plan_text.replace('\n', ' ')}
+        try:
+            # First try to parse the entire response as JSON
+            diet_plan = json.loads(response_text)
+            return diet_plan
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from the text
+            import re
+            json_match = re.search(r'({[\s\S]*})', response_text)
 
-        return diet_plan_json
+            if json_match:
+                json_text = json_match.group(1)
+                try:
+                    diet_plan = json.loads(json_text)
+                    return diet_plan
+                except json.JSONDecodeError as e:
+                    return {"error": f"Failed to parse JSON: {str(e)}", "raw_response": response_text}
+            else:
+                return {"error": "No JSON found in the response", "raw_response": response_text}
 
     except Exception as e:
         print(f"Error generating diet plan: {str(e)}")
-        return None
+        return {"error": f"Failed to generate diet plan: {str(e)}"}
 
 
 @api_view(['POST'])
