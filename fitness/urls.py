@@ -78,4 +78,6 @@ urlpatterns = [
          name='concise_health_answer'),
     path('api/set-food-culture', views.set_food_culture, name='set_food_culture'),
     path('api/set-user-country', views.set_user_country, name='set_user_country'),
+    path('api/set-food-openness', views.set_food_openness,
+         name='set_food_openness'),
 ]

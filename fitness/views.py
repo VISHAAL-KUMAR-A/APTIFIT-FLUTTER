@@ -3660,3 +3660,44 @@ def set_user_country(request):
     user.save()
 
     return JsonResponse({'success': True, 'message': 'Country set successfully'})
+
+
+@api_view(['POST'])
+def set_food_openness(request):
+    # Extract the token from the request body
+    token_string = request.data.get('token')
+    if not token_string:
+        return JsonResponse({'error': 'Authentication token is required'}, status=400)
+
+    # Validate the token
+    try:
+        token = Token.objects.get(token=token_string)
+        if not token.is_valid():
+            return JsonResponse({'error': 'Token has expired'}, status=401)
+        user = token.user
+    except Token.DoesNotExist:
+        return JsonResponse({'error': 'Invalid token'}, status=401)
+
+    # Check if the user has already set their food openness
+    if user.food_openness is not None:
+        return JsonResponse({'error': 'Food openness has already been set'}, status=400)
+
+    # Get the food openness from the request
+    try:
+        food_openness = int(request.data.get('food_openness', 0))
+    except ValueError:
+        return JsonResponse({'error': 'Food openness must be a number'}, status=400)
+
+    # Validate the input (must be between 1 and 5)
+    if food_openness < 1 or food_openness > 5:
+        return JsonResponse({'error': 'Food openness must be between 1 and 5'}, status=400)
+
+    # Update the user's food openness
+    user.food_openness = food_openness
+    user.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Food openness set successfully',
+        'food_openness': food_openness
+    })
