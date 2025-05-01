@@ -3752,3 +3752,80 @@ def set_allergies_restrictions(request):
         'message': 'Allergies and food restrictions set successfully',
         'allergies_restrictions': allergies_restrictions
     })
+
+
+@api_view(['POST'])
+def get_all_users(request):
+    # Extract the token from the request body
+    token_value = request.data.get('token')
+
+    if not token_value:
+        return Response({'error': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Verify the token
+        user_token = Token.objects.get(token=token_value)
+        requesting_user = user_token.user
+
+        # Get all users
+        users = User.objects.all()
+
+        # Convert users to a list of dictionaries with basic info
+        user_list = []
+        for u in users:
+            # Start with the fields we know exist
+            user_data = {
+                'id': u.id,
+                'email': u.email,
+            }
+
+            # Try to add username - check various possible field names
+            if hasattr(u, 'username'):
+                user_data['username'] = u.username
+            elif hasattr(u, 'user_name'):
+                user_data['username'] = u.user_name
+            elif hasattr(u, 'name'):
+                user_data['username'] = u.name
+
+            # Add other potentially useful fields
+            # First name
+            if hasattr(u, 'first_name'):
+                user_data['first_name'] = u.first_name
+
+            # Last name
+            if hasattr(u, 'last_name'):
+                user_data['last_name'] = u.last_name
+
+            # Full name (if exists as a field)
+            if hasattr(u, 'full_name'):
+                user_data['full_name'] = u.full_name
+
+            # Try to get profile information if available
+            if hasattr(u, 'profile'):
+                profile = u.profile
+                if hasattr(profile, 'gender'):
+                    user_data['gender'] = profile.gender
+                if hasattr(profile, 'age'):
+                    user_data['age'] = profile.age
+
+            # Additional fitness-related fields
+            fields_to_check = ['height', 'weight',
+                               'bmi', 'fitness_goal', 'activity_level']
+            for field in fields_to_check:
+                if hasattr(u, field):
+                    user_data[field] = getattr(u, field)
+
+            # Add creation date if available
+            if hasattr(u, 'date_joined'):
+                user_data['date_joined'] = u.date_joined
+            elif hasattr(u, 'created_at'):
+                user_data['date_joined'] = u.created_at
+
+            user_list.append(user_data)
+
+        return Response({'users': user_list}, status=status.HTTP_200_OK)
+
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

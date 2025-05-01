@@ -84,4 +84,5 @@ urlpatterns = [
          name='set_spice_preference'),
     path('api/set-allergies-restrictions',
          views.set_allergies_restrictions, name='set_allergies_restrictions'),
+    path('api/get-all-users/', views.get_all_users, name='get_all_users'),
 ]
