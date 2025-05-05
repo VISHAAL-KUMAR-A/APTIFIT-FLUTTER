@@ -85,4 +85,9 @@ urlpatterns = [
     path('api/set-allergies-restrictions',
          views.set_allergies_restrictions, name='set_allergies_restrictions'),
     path('api/get-all-users/', views.get_all_users, name='get_all_users'),
+    path('api/create-group/', views.create_group, name='create_group'),
+    path('api/get-groups/', views.get_groups, name='get_groups'),
+    path('api/join-group/', views.join_group, name='join_group'),
+    path('api/leave-group/', views.leave_group, name='leave_group'),
+    path('api/user-groups/', views.get_user_groups, name='get_user_groups'),
 ]

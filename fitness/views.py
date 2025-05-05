@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -3829,3 +3829,188 @@ def get_all_users(request):
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def create_group(request):
+    """Create a new group"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get group data
+    name = request.data.get('name')
+    description = request.data.get('description')
+    category = request.data.get('category')
+
+    # Validate required fields
+    if not name or not description or not category:
+        return Response({
+            'error': 'Name, description, and category are required fields'
+        }, status=400)
+
+    # Create group instance
+    group = Group(
+        name=name,
+        description=description,
+        category=category,
+        created_by=user
+    )
+
+    # Handle image upload if provided
+    if 'image' in request.FILES:
+        group.image = request.FILES['image']
+
+    group.save()
+
+    # Add creator as a member
+    group.members.add(user)
+
+    # Return the created group
+    serializer = GroupSerializer(group)
+    return Response({
+        'message': 'Group created successfully',
+        'group': serializer.data
+    }, status=201)
+
+
+@api_view(['GET'])
+def get_groups(request):
+    """Get all groups or filter by category"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Filter by category if provided
+    category = request.query_params.get('category')
+    if category:
+        groups = Group.objects.filter(category=category)
+    else:
+        groups = Group.objects.all()
+
+    serializer = GroupSerializer(groups, many=True)
+    return Response({
+        'groups': serializer.data
+    }, status=200)
+
+
+@api_view(['POST'])
+def join_group(request):
+    """Join an existing group"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get group ID from request
+    group_id = request.data.get('group_id')
+    if not group_id:
+        return Response({'error': 'Group ID is required'}, status=400)
+
+    try:
+        group = Group.objects.get(id=group_id)
+
+        # Check if user is already a member
+        if user in group.members.all():
+            return Response({'message': 'You are already a member of this group'}, status=200)
+
+        # Add user to group members
+        group.members.add(user)
+
+        return Response({
+            'message': f'Successfully joined the group: {group.name}',
+            'group': GroupSerializer(group).data
+        }, status=200)
+
+    except Group.DoesNotExist:
+        return Response({'error': 'Group not found'}, status=404)
+
+
+@api_view(['POST'])
+def leave_group(request):
+    """Leave a group"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get group ID from request
+    group_id = request.data.get('group_id')
+    if not group_id:
+        return Response({'error': 'Group ID is required'}, status=400)
+
+    try:
+        group = Group.objects.get(id=group_id)
+
+        # Check if user is a member
+        if user not in group.members.all():
+            return Response({'error': 'You are not a member of this group'}, status=400)
+
+        # Remove user from group members
+        group.members.remove(user)
+
+        return Response({
+            'message': f'Successfully left the group: {group.name}'
+        }, status=200)
+
+    except Group.DoesNotExist:
+        return Response({'error': 'Group not found'}, status=404)
+
+
+@api_view(['GET'])
+def get_user_groups(request):
+    """Get all groups the user is a member of"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get user's groups
+    groups = user.joined_groups.all()
+
+    serializer = GroupSerializer(groups, many=True)
+    return Response({
+        'groups': serializer.data
+    }, status=200)

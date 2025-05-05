@@ -177,3 +177,19 @@ class DietPlan(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class Group(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    category = models.CharField(max_length=50)
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='created_groups')
+    members = models.ManyToManyField(
+        User, related_name='joined_groups', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    image = models.ImageField(upload_to='group_images/', null=True, blank=True)
+
+    def __str__(self):
+        return self.name
