@@ -90,4 +90,5 @@ urlpatterns = [
     path('api/join-group/', views.join_group, name='join_group'),
     path('api/leave-group/', views.leave_group, name='leave_group'),
     path('api/user-groups/', views.get_user_groups, name='get_user_groups'),
+    path('api/exercise-tips/', views.get_exercise_tips, name='get_exercise_tips'),
 ]

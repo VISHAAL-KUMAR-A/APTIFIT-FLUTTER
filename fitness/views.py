@@ -4014,3 +4014,193 @@ def get_user_groups(request):
     return Response({
         'groups': serializer.data
     }, status=200)
+
+
+@api_view(['POST'])
+def get_exercise_tips(request):
+    """Get personalized tips for a specific exercise based on user's profile and metrics"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get exercise name from request
+    exercise_name = request.data.get('exercise')
+    if not exercise_name:
+        return Response({'error': 'Exercise name is required'}, status=400)
+
+    # Get user's profile and metrics data for context
+    user_profile = {
+        'age': user.age,
+        'gender': user.gender,
+        'height': user.height,
+        'weight': user.weight,
+        'fitness_goal': user.fitness_goal,
+        'activity_level': user.activity_level,
+        'fitness_level': user.fitness_level
+    }
+
+    # Calculate BMI if height and weight are available
+    bmi = None
+    if user.height and user.weight:
+        height_m = user.height / 100  # Convert cm to m
+        bmi = round(user.weight / (height_m * height_m), 2)
+        user_profile['bmi'] = bmi
+
+    # Get BMR and ideal weight from previous calculations if available
+    try:
+        # Try to get BMR from a recent calculation
+        health_qa = HealthQA.objects.filter(
+            user=user,
+            question__icontains="bmr"
+        ).order_by('-created_at').first()
+
+        if health_qa and "bmr" in health_qa.answer.lower():
+            # Extract BMR from the answer using regex
+            import re
+            bmr_match = re.search(r'bmr\s*:?\s*(\d+)',
+                                  health_qa.answer.lower())
+            if bmr_match:
+                user_profile['bmr'] = bmr_match.group(1)
+    except:
+        # If there's any error, just continue without BMR
+        pass
+
+    # Generate exercise tips using OpenAI
+    tips = generate_exercise_tips(exercise_name, user_profile)
+
+    return Response({
+        'exercise': exercise_name,
+        'tips': tips
+    }, status=200)
+
+
+def generate_exercise_tips(exercise_name, user_profile):
+    """Generate personalized exercise tips using OpenAI API"""
+    try:
+        # Get OpenAI API key from environment variables
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return ["Unable to generate personalized tips at this time. Please try again later."]
+
+        # Using project API key
+        client = openai.OpenAI(
+            api_key=api_key
+        )
+
+        # Format user profile info for the prompt
+        profile_info = ""
+        for key, value in user_profile.items():
+            if value is not None and value != '':
+                profile_info += f"{key.replace('_', ' ').title()}: {value}\n"
+
+        # Create prompt for GPT
+        system_message = (
+            "You are a professional fitness trainer providing specific, actionable tips for exercises. "
+            "For each exercise, provide EXACTLY 4 concise tips that are tailored to the user's profile. "
+            "Each tip should be 1-2 sentences and focus on form, technique, common mistakes, or modifications "
+            "based on the user's metrics (BMI, fitness level, goals, etc.). "
+            "Return ONLY a JSON array containing exactly 4 tips as strings. No additional text or explanation."
+        )
+
+        user_message = (
+            f"Generate 4 specific tips for the exercise: {exercise_name}\n\n"
+            f"User profile:\n{profile_info}\n\n"
+            f"Provide EXACTLY 4 concise, helpful tips as a JSON array of strings. "
+            f"Each tip should be tailored to this specific exercise and user profile."
+        )
+
+        # Call GPT API
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        # Parse the response
+        result = response.choices[0].message.content.strip()
+
+        # Try to parse the JSON from the response
+        import json
+        import re
+
+        try:
+            # First try direct JSON parsing
+            tips_list = json.loads(result)
+
+            # Ensure we have exactly 4 tips
+            if not isinstance(tips_list, list):
+                raise ValueError("Response is not a list")
+
+            # Limit to exactly 4 tips
+            if len(tips_list) > 4:
+                tips_list = tips_list[:4]
+            while len(tips_list) < 4:
+                tips_list.append(
+                    f"Focus on your breathing during the {exercise_name}.")
+
+            return tips_list
+
+        except json.JSONDecodeError:
+            # If parsing fails, try to extract with regex
+            json_match = re.search(r'\[(.*)\]', result, re.DOTALL)
+            if json_match:
+                try:
+                    # Try to parse as a JSON array
+                    tips_text = "[" + json_match.group(1) + "]"
+                    tips_list = json.loads(tips_text)
+
+                    # Ensure we have exactly 4 tips
+                    if len(tips_list) > 4:
+                        tips_list = tips_list[:4]
+                    while len(tips_list) < 4:
+                        tips_list.append(
+                            f"Focus on your breathing during the {exercise_name}.")
+
+                    return tips_list
+                except:
+                    pass
+
+            # If all parsing fails, manually extract tips
+            tips = re.findall(r'[\d\.\"\']+(.*?)[\"\']', result)
+            if tips and len(tips) >= 4:
+                return tips[:4]
+
+            # Last resort: split by newlines or numbers
+            if "1." in result or "1)" in result:
+                tips = re.split(r'\d[\.\)]', result)
+                tips = [tip.strip() for tip in tips if tip.strip()]
+                if tips and len(tips) >= 4:
+                    return tips[:4]
+
+            # If all else fails, provide default tips
+            return [
+                f"Keep proper form during {exercise_name} to prevent injury.",
+                f"Start with lighter weights for {exercise_name} if you're a beginner.",
+                f"Focus on controlled movements while doing {exercise_name}.",
+                f"Remember to breathe properly throughout your {exercise_name}."
+            ]
+
+    except Exception as e:
+        # Log the error (in a production environment)
+        print(f"Error generating exercise tips: {str(e)}")
+
+        # Provide default tips as fallback
+        return [
+            f"Keep proper form during {exercise_name} to prevent injury.",
+            f"Start with lighter weights for {exercise_name} if you're a beginner.",
+            f"Focus on controlled movements while doing {exercise_name}.",
+            f"Remember to breathe properly throughout your {exercise_name}."
+        ]
