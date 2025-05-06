@@ -4204,3 +4204,178 @@ def generate_exercise_tips(exercise_name, user_profile):
             f"Focus on controlled movements while doing {exercise_name}.",
             f"Remember to breathe properly throughout your {exercise_name}."
         ]
+
+
+@api_view(['POST'])
+def send_friend_request(request):
+    """Send a friend request to another user"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        sender = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get recipient's user ID
+    recipient_id = request.data.get('recipient_id')
+    if not recipient_id:
+        return Response({'error': 'Recipient ID is required'}, status=400)
+
+    try:
+        recipient = User.objects.get(id=recipient_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Recipient user not found'}, status=404)
+
+    # Check if users are already friends
+    if recipient in sender.friends.all():
+        return Response({'error': 'Users are already friends'}, status=400)
+
+    # Check if friend request is already sent
+    if recipient in sender.friend_requests_sent.all():
+        return Response({'error': 'Friend request already sent'}, status=400)
+
+    # Check if recipient has already sent a request to sender
+    if sender in recipient.friend_requests_sent.all():
+        # Auto-accept the request, making them friends
+        sender.friends.add(recipient)
+        # Remove the pending request
+        recipient.friend_requests_sent.remove(sender)
+        return Response({
+            'message': f'You and {recipient.name or recipient.email} are now friends',
+            'friend_count': sender.friends.count()
+        }, status=200)
+
+    # Send friend request
+    sender.friend_requests_sent.add(recipient)
+
+    return Response({
+        'message': f'Friend request sent to {recipient.name or recipient.email}',
+        'pending_requests_count': sender.friend_requests_sent.count()
+    }, status=200)
+
+
+@api_view(['POST'])
+def respond_to_friend_request(request):
+    """Accept or decline a friend request"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        recipient = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get sender's user ID and response
+    sender_id = request.data.get('sender_id')
+    action = request.data.get('action')  # 'accept' or 'decline'
+
+    if not sender_id:
+        return Response({'error': 'Sender ID is required'}, status=400)
+    if not action or action not in ['accept', 'decline']:
+        return Response({'error': 'Action must be either "accept" or "decline"'}, status=400)
+
+    try:
+        sender = User.objects.get(id=sender_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Sender user not found'}, status=404)
+
+    # Check if there's a pending request
+    if recipient not in sender.friend_requests_sent.all():
+        return Response({'error': 'No pending friend request from this user'}, status=400)
+
+    if action == 'accept':
+        # Add users as friends
+        recipient.friends.add(sender)
+        # Remove the pending request
+        sender.friend_requests_sent.remove(recipient)
+        return Response({
+            'message': f'You and {sender.name or sender.email} are now friends',
+            'friend_count': recipient.friends.count()
+        }, status=200)
+    else:  # decline
+        # Just remove the pending request
+        sender.friend_requests_sent.remove(recipient)
+        return Response({
+            'message': f'Friend request from {sender.name or sender.email} declined'
+        }, status=200)
+
+
+@api_view(['POST'])
+def get_friends(request):
+    """Get the authenticated user's friends list"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get user's friends
+    friends = user.friends.all()
+
+    # Get basic info for each friend
+    friends_list = []
+    for friend in friends:
+        friend_data = {
+            'id': friend.id,
+            'email': friend.email,
+            'name': friend.name or "",
+        }
+        friends_list.append(friend_data)
+
+    return Response({
+        'friends': friends_list,
+        'friend_count': len(friends_list)
+    }, status=200)
+
+
+@api_view(['POST'])
+def get_friend_requests(request):
+    """Get pending friend requests for the authenticated user"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get incoming friend requests
+    requests = user.friend_requests_received.all()
+
+    # Get basic info for each request
+    requests_list = []
+    for sender in requests:
+        sender_data = {
+            'id': sender.id,
+            'email': sender.email,
+            'name': sender.name or "",
+        }
+        requests_list.append(sender_data)
+
+    return Response({
+        'requests': requests_list,
+        'request_count': len(requests_list)
+    }, status=200)

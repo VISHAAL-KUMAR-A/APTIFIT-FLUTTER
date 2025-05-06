@@ -46,6 +46,12 @@ class User(models.Model):
     reset_password_token_created_at = models.DateTimeField(
         null=True, blank=True)
 
+    # New fields for friend system
+    friends = models.ManyToManyField(
+        'self', symmetrical=True, blank=True, related_name='user_friends')
+    friend_requests_sent = models.ManyToManyField(
+        'self', symmetrical=False, blank=True, related_name='friend_requests_received')
+
     def generate_verification_token(self):
         self.verification_token = str(uuid.uuid4())
         self.verification_token_created_at = timezone.now()

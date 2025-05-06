@@ -91,4 +91,11 @@ urlpatterns = [
     path('api/leave-group/', views.leave_group, name='leave_group'),
     path('api/user-groups/', views.get_user_groups, name='get_user_groups'),
     path('api/exercise-tips/', views.get_exercise_tips, name='get_exercise_tips'),
+    path('api/send-friend-request/', views.send_friend_request,
+         name='send_friend_request'),
+    path('api/respond-to-friend-request/',
+         views.respond_to_friend_request, name='respond_to_friend_request'),
+    path('api/get-friends/', views.get_friends, name='get_friends'),
+    path('api/get-friend-requests/', views.get_friend_requests,
+         name='get_friend_requests'),
 ]
