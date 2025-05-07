@@ -199,3 +199,19 @@ class Group(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ExerciseSet(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='exercise_sets')
+    exercise_name = models.CharField(max_length=100)
+    weight_kg = models.FloatField()
+    reps = models.IntegerField()
+    date = models.DateField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.exercise_name}: {self.weight_kg}kg × {self.reps} reps"

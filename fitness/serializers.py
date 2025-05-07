@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group
+from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet
 from django.contrib.auth.hashers import make_password
 
 
@@ -80,3 +80,10 @@ class GroupSerializer(serializers.ModelSerializer):
 
     def get_member_count(self, obj):
         return obj.members.count()
+
+
+class ExerciseSetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExerciseSet
+        fields = ['id', 'exercise_name', 'weight_kg',
+                  'reps', 'date', 'created_at']

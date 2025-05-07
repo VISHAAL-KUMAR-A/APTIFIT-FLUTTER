@@ -98,4 +98,7 @@ urlpatterns = [
     path('api/get-friends/', views.get_friends, name='get_friends'),
     path('api/get-friend-requests/', views.get_friend_requests,
          name='get_friend_requests'),
+    path('api/log-exercise-set/', views.log_exercise_set, name='log_exercise_set'),
+    path('api/get-exercise-sets/', views.get_exercise_sets,
+         name='get_exercise_sets'),
 ]

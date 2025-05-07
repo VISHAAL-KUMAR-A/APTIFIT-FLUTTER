@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer, ExerciseSetSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -4378,4 +4378,114 @@ def get_friend_requests(request):
     return Response({
         'requests': requests_list,
         'request_count': len(requests_list)
+    }, status=200)
+
+
+@api_view(['POST'])
+def log_exercise_set(request):
+    """Record an exercise set with weight and reps"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get required data
+    exercise_name = request.data.get('exercise_name')
+    weight_kg = request.data.get('weight_kg')
+    reps = request.data.get('reps')
+    date = request.data.get('date', timezone.now().date())
+
+    # Validate required fields
+    if not exercise_name:
+        return Response({'error': 'Exercise name is required'}, status=400)
+
+    try:
+        weight_kg = float(weight_kg)
+        if weight_kg < 0:
+            return Response({'error': 'Weight must be a positive number'}, status=400)
+    except (ValueError, TypeError):
+        return Response({'error': 'Weight must be a valid number'}, status=400)
+
+    try:
+        reps = int(reps)
+        if reps <= 0:
+            return Response({'error': 'Reps must be a positive integer'}, status=400)
+    except (ValueError, TypeError):
+        return Response({'error': 'Reps must be a valid integer'}, status=400)
+
+    # Create and save the exercise set
+    exercise_set = ExerciseSet(
+        user=user,
+        exercise_name=exercise_name,
+        weight_kg=weight_kg,
+        reps=reps,
+        date=date
+    )
+    exercise_set.save()
+
+    # Return the created set
+    serializer = ExerciseSetSerializer(exercise_set)
+    return Response({
+        'message': 'Exercise set logged successfully',
+        'set': serializer.data
+    }, status=201)
+
+
+@api_view(['POST'])
+def get_exercise_sets(request):
+    """Get exercise sets for the authenticated user with optional filtering"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get optional filters
+    exercise_name = request.data.get('exercise_name')
+    start_date = request.data.get('start_date')
+    end_date = request.data.get('end_date')
+
+    # Base query - get all sets for the user
+    sets_query = ExerciseSet.objects.filter(user=user)
+
+    # Apply filters if provided
+    if exercise_name:
+        sets_query = sets_query.filter(exercise_name=exercise_name)
+
+    if start_date:
+        try:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            sets_query = sets_query.filter(date__gte=start_date)
+        except ValueError:
+            return Response({'error': 'Invalid start_date format. Use YYYY-MM-DD'}, status=400)
+
+    if end_date:
+        try:
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            sets_query = sets_query.filter(date__lte=end_date)
+        except ValueError:
+            return Response({'error': 'Invalid end_date format. Use YYYY-MM-DD'}, status=400)
+
+    # Execute query and serialize results
+    sets = sets_query.order_by('-date', '-created_at')
+    serializer = ExerciseSetSerializer(sets, many=True)
+
+    return Response({
+        'sets': serializer.data,
+        'count': len(serializer.data)
     }, status=200)
