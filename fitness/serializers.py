@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet
+from .models import User, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet, Message
 from django.contrib.auth.hashers import make_password
 
 
@@ -87,3 +87,20 @@ class ExerciseSetSerializer(serializers.ModelSerializer):
         model = ExerciseSet
         fields = ['id', 'exercise_name', 'weight_kg',
                   'reps', 'date', 'created_at']
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+    recipient_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Message
+        fields = ['id', 'sender', 'recipient', 'sender_name',
+                  'recipient_name', 'content', 'is_read', 'created_at']
+        read_only_fields = ['sender', 'is_read', 'created_at']
+
+    def get_sender_name(self, obj):
+        return obj.sender.name or obj.sender.email
+
+    def get_recipient_name(self, obj):
+        return obj.recipient.name or obj.recipient.email

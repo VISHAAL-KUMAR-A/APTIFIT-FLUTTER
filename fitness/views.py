@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet
-from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer, ExerciseSetSerializer
+from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet, Message
+from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer, ExerciseSetSerializer, MessageSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 from datetime import timedelta
@@ -14,6 +14,7 @@ import openai
 from django.conf import settings
 import re
 from django.http import JsonResponse
+from django.db import models
 
 
 # Create your views here.
@@ -4488,4 +4489,290 @@ def get_exercise_sets(request):
     return Response({
         'sets': serializer.data,
         'count': len(serializer.data)
+    }, status=200)
+
+
+@api_view(['POST'])
+def send_message(request):
+    """Send a message to a friend"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        sender = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get recipient's user ID
+    recipient_id = request.data.get('recipient_id')
+    if not recipient_id:
+        return Response({'error': 'Recipient ID is required'}, status=400)
+
+    # Get message content
+    content = request.data.get('content')
+    if not content or content.strip() == '':
+        return Response({'error': 'Message content is required'}, status=400)
+
+    try:
+        recipient = User.objects.get(id=recipient_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Recipient user not found'}, status=404)
+
+    # Check if the users are friends
+    if recipient not in sender.friends.all():
+        return Response({'error': 'You can only send messages to your friends'}, status=403)
+
+    # Create and save the message
+    message = Message(
+        sender=sender,
+        recipient=recipient,
+        content=content
+    )
+    message.save()
+
+    # Return the created message
+    serializer = MessageSerializer(message)
+    return Response({
+        'message': 'Message sent successfully',
+        'data': serializer.data
+    }, status=201)
+
+
+@api_view(['POST'])
+def get_chat_history(request):
+    """Get chat history with a specific friend"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get friend's user ID
+    friend_id = request.data.get('friend_id')
+    if not friend_id:
+        return Response({'error': 'Friend ID is required'}, status=400)
+
+    try:
+        friend = User.objects.get(id=friend_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Friend user not found'}, status=404)
+
+    # Check if the users are friends
+    if friend not in user.friends.all():
+        return Response({'error': 'You can only view chat history with your friends'}, status=403)
+
+    # Get chat history between the two users (messages sent by either user)
+    messages = Message.objects.filter(
+        (models.Q(sender=user) & models.Q(recipient=friend)) |
+        (models.Q(sender=friend) & models.Q(recipient=user))
+    ).order_by('created_at')
+
+    # Mark messages from friend as read
+    unread_messages = messages.filter(
+        sender=friend, recipient=user, is_read=False)
+    for message in unread_messages:
+        message.is_read = True
+        message.save()
+
+    # Return the chat history
+    serializer = MessageSerializer(messages, many=True)
+    return Response({
+        'friend_id': friend.id,
+        'friend_name': friend.name or friend.email,
+        'messages': serializer.data,
+        'message_count': len(serializer.data)
+    }, status=200)
+
+
+@api_view(['POST'])
+def get_unread_messages(request):
+    """Get all unread messages for the authenticated user"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get all unread messages for the user
+    unread_messages = Message.objects.filter(recipient=user, is_read=False)
+
+    # Group by sender
+    messages_by_sender = {}
+    for message in unread_messages:
+        sender_id = message.sender.id
+        if sender_id not in messages_by_sender:
+            messages_by_sender[sender_id] = {
+                'sender_id': sender_id,
+                'sender_name': message.sender.name or message.sender.email,
+                'message_count': 0,
+                'messages': []
+            }
+
+        messages_by_sender[sender_id]['message_count'] += 1
+        messages_by_sender[sender_id]['messages'].append(
+            MessageSerializer(message).data)
+
+    return Response({
+        'unread_messages': list(messages_by_sender.values()),
+        'total_unread_count': unread_messages.count()
+    }, status=200)
+
+
+@api_view(['POST'])
+def mark_messages_as_read(request):
+    """Mark messages from a specific sender as read"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get sender's user ID
+    sender_id = request.data.get('sender_id')
+    if not sender_id:
+        return Response({'error': 'Sender ID is required'}, status=400)
+
+    try:
+        sender = User.objects.get(id=sender_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Sender user not found'}, status=404)
+
+    # Mark all unread messages from the sender as read
+    unread_count = Message.objects.filter(
+        sender=sender, recipient=user, is_read=False).count()
+    Message.objects.filter(sender=sender, recipient=user,
+                           is_read=False).update(is_read=True)
+
+    return Response({
+        'message': f'Marked {unread_count} messages as read',
+        'sender_id': sender.id,
+        'sender_name': sender.name or sender.email,
+        'messages_read': unread_count
+    }, status=200)
+
+
+@api_view(['POST'])
+def delete_message(request):
+    """Delete a specific message (only if you're the sender)"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get message ID
+    message_id = request.data.get('message_id')
+    if not message_id:
+        return Response({'error': 'Message ID is required'}, status=400)
+
+    try:
+        message = Message.objects.get(id=message_id)
+    except Message.DoesNotExist:
+        return Response({'error': 'Message not found'}, status=404)
+
+    # Check if the user is the sender of the message
+    if message.sender.id != user.id:
+        return Response({'error': 'You can only delete messages that you sent'}, status=403)
+
+    # Delete the message
+    message.delete()
+
+    return Response({
+        'message': 'Message deleted successfully'
+    }, status=200)
+
+
+@api_view(['POST'])
+def get_recent_chats(request):
+    """Get a list of recent chat conversations"""
+    # Check if user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get users that the current user has exchanged messages with
+    sent_to = Message.objects.filter(sender=user).values_list(
+        'recipient', flat=True).distinct()
+    received_from = Message.objects.filter(
+        recipient=user).values_list('sender', flat=True).distinct()
+
+    # Combine and remove duplicates
+    contact_ids = set(list(sent_to) + list(received_from))
+
+    # Get only friends from these contacts
+    friend_ids = user.friends.values_list('id', flat=True)
+    chat_friend_ids = [id for id in contact_ids if id in friend_ids]
+
+    # Get the most recent message with each friend
+    recent_chats = []
+    for friend_id in chat_friend_ids:
+        friend = User.objects.get(id=friend_id)
+
+        # Get the most recent message between the user and this friend
+        last_message = Message.objects.filter(
+            (models.Q(sender=user) & models.Q(recipient=friend)) |
+            (models.Q(sender=friend) & models.Q(recipient=user))
+        ).order_by('-created_at').first()
+
+        if last_message:
+            # Count unread messages from this friend
+            unread_count = Message.objects.filter(
+                sender=friend, recipient=user, is_read=False
+            ).count()
+
+            recent_chats.append({
+                'friend_id': friend.id,
+                'friend_name': friend.name or friend.email,
+                'last_message': MessageSerializer(last_message).data,
+                'unread_count': unread_count
+            })
+
+    # Sort by most recent message
+    recent_chats.sort(
+        key=lambda x: x['last_message']['created_at'], reverse=True)
+
+    return Response({
+        'recent_chats': recent_chats,
+        'chat_count': len(recent_chats)
     }, status=200)
