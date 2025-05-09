@@ -3121,27 +3121,32 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
             {{
               "type": "Breakfast",
               "meal": "Description",
-              "calories": "Approximate calories"
+              "calories": "Approximate calories",
+              "protein": "Protein in grams"
             }},
             {{
               "type": "Lunch",
               "meal": "Description",
-              "calories": "Approximate calories"
+              "calories": "Approximate calories",
+              "protein": "Protein in grams"
             }},
             {{
               "type": "Dinner",
               "meal": "Description",
-              "calories": "Approximate calories"
+              "calories": "Approximate calories",
+              "protein": "Protein in grams"
             }},
             {{
               "type": "Snack 1",
               "meal": "Description",
-              "calories": "Approximate calories"
+              "calories": "Approximate calories",
+              "protein": "Protein in grams"
             }},
             {{
               "type": "Snack 2",
               "meal": "Description",
-              "calories": "Approximate calories"
+              "calories": "Approximate calories",
+              "protein": "Protein in grams"
             }}
           ]
         }}
@@ -3153,7 +3158,7 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
       ]
     }}
     
-    Important: Use the days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) instead of Day 1, Day 2, etc. Include all 7 days in the "days" array with the same structure as shown above. Make sure the JSON is valid with no comments or trailing commas. The response must be a properly formatted JSON object that can be parsed.
+    Important: Use the days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) instead of Day 1, Day 2, etc. Include all 7 days in the "days" array with the same structure as shown above. Make sure the JSON is valid with no comments or trailing commas. The response must be a properly formatted JSON object that can be parsed. For each meal, provide both calories and protein content in grams.
     """
 
     try:
