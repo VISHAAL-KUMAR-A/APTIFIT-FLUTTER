@@ -3272,6 +3272,22 @@ def update_diet_plan(request):
             'message': 'Day, meal_type, and meal_data are required'
         }, status=400)
 
+    # Check if nutritional data should be auto-generated
+    auto_generate = request.data.get('auto_generate_nutrition', False)
+
+    # If auto-generate is requested and meal description is provided, calculate nutrition data
+    if auto_generate and 'meal' in meal_data:
+        try:
+            nutrition_data = calculate_meal_nutrition(meal_data['meal'], user)
+            # Update meal data with generated nutritional info
+            if 'calories' not in meal_data or not meal_data['calories']:
+                meal_data['calories'] = nutrition_data.get('calories', '0')
+            if 'protein' not in meal_data or not meal_data['protein']:
+                meal_data['protein'] = nutrition_data.get('protein', '0g')
+        except Exception as e:
+            print(f"Error generating nutritional data: {str(e)}")
+            # Continue with user-provided data if generation fails
+
     try:
         # Find the diet plan
         diet_plan = DietPlan.objects.get(id=diet_plan_id, user=user)
@@ -3279,53 +3295,114 @@ def update_diet_plan(request):
         # Get the current plan data
         current_plan_data = diet_plan.plan_data
 
-        # Check if the day exists in the current plan
-        if day not in current_plan_data:
-            return Response({
-                'status': 'error',
-                'message': f'Day "{day}" not found in diet plan'
-            }, status=400)
+        # Modified logic to handle the plan structure correctly
+        if 'days' in current_plan_data:
+            # This is the common structure with days as an array
+            day_found = False
+            meal_found = False
 
-        # Handle raw_plan case (when plan is stored as string in raw_plan field)
-        if 'raw_plan' in current_plan_data:
+            # Find the day in the days array
+            for i, day_entry in enumerate(current_plan_data['days']):
+                if day_entry.get('day') == day:
+                    day_found = True
+
+                    # Find the meal within this day
+                    for j, meal in enumerate(day_entry.get('meals', [])):
+                        if meal.get('type') == meal_type:
+                            meal_found = True
+                            # Update the meal
+                            current_plan_data['days'][i]['meals'][j] = meal_data
+                            break
+
+                    # If we found the day but not the meal
+                    if not meal_found:
+                        return Response({
+                            'status': 'error',
+                            'message': f'Meal type "{meal_type}" not found for {day}'
+                        }, status=400)
+                    break
+
+            # If the day wasn't found
+            if not day_found:
+                return Response({
+                    'status': 'error',
+                    'message': f'Day "{day}" not found in diet plan'
+                }, status=400)
+
+        elif 'raw_plan' in current_plan_data:
+            # Handle raw_plan case (when plan is stored as string in raw_plan field)
             import json
             try:
                 # Try to parse the raw_plan as JSON
                 plan_content = json.loads(current_plan_data['raw_plan'])
 
-                # Check if the day exists in the parsed plan
-                if day not in plan_content:
-                    return Response({
-                        'status': 'error',
-                        'message': f'Day "{day}" not found in diet plan'
-                    }, status=400)
+                # Check for days array structure
+                if 'days' in plan_content:
+                    day_found = False
+                    meal_found = False
 
-                # Update the specific meal
-                if meal_type not in plan_content[day]:
-                    return Response({
-                        'status': 'error',
-                        'message': f'Meal type "{meal_type}" not found for {day}'
-                    }, status=400)
+                    for i, day_entry in enumerate(plan_content['days']):
+                        if day_entry.get('day') == day:
+                            day_found = True
 
-                # Update the meal data
-                plan_content[day][meal_type] = meal_data
+                            for j, meal in enumerate(day_entry.get('meals', [])):
+                                if meal.get('type') == meal_type:
+                                    meal_found = True
+                                    plan_content['days'][i]['meals'][j] = meal_data
+                                    break
 
-                # Update the raw_plan with modified data
-                current_plan_data['raw_plan'] = json.dumps(plan_content)
+                            if not meal_found:
+                                return Response({
+                                    'status': 'error',
+                                    'message': f'Meal type "{meal_type}" not found for {day}'
+                                }, status=400)
+                            break
+
+                    if not day_found:
+                        return Response({
+                            'status': 'error',
+                            'message': f'Day "{day}" not found in diet plan'
+                        }, status=400)
+
+                    # Update the raw_plan with modified data
+                    current_plan_data['raw_plan'] = json.dumps(plan_content)
+                else:
+                    # Original format with direct day keys
+                    if day not in plan_content:
+                        return Response({
+                            'status': 'error',
+                            'message': f'Day "{day}" not found in diet plan'
+                        }, status=400)
+
+                    if meal_type not in plan_content[day]:
+                        return Response({
+                            'status': 'error',
+                            'message': f'Meal type "{meal_type}" not found for {day}'
+                        }, status=400)
+
+                    plan_content[day][meal_type] = meal_data
+                    current_plan_data['raw_plan'] = json.dumps(plan_content)
+
             except json.JSONDecodeError:
                 return Response({
                     'status': 'error',
                     'message': 'Could not parse raw_plan data. It may be in an invalid format.'
                 }, status=500)
+
         else:
-            # Regular plan structure (direct JSON)
+            # Direct day structure
+            if day not in current_plan_data:
+                return Response({
+                    'status': 'error',
+                    'message': f'Day "{day}" not found in diet plan'
+                }, status=400)
+
             if meal_type not in current_plan_data[day]:
                 return Response({
                     'status': 'error',
                     'message': f'Meal type "{meal_type}" not found for {day}'
                 }, status=400)
 
-            # Update the specific meal
             current_plan_data[day][meal_type] = meal_data
 
         # Save the updated plan data
@@ -3346,10 +3423,101 @@ def update_diet_plan(request):
             'message': 'Diet plan not found or you do not have permission to update it'
         }, status=404)
     except Exception as e:
+        # Add more detailed error for debugging
+        import traceback
+        print(f"Error updating diet plan: {str(e)}")
+        print(traceback.format_exc())
         return Response({
             'status': 'error',
             'message': f'Error updating diet plan: {str(e)}'
         }, status=500)
+
+# New helper function to calculate nutritional data for a meal
+
+
+def calculate_meal_nutrition(meal_description, user=None):
+    """
+    Use OpenAI to calculate approximate calories and protein for a meal description
+    """
+    try:
+        # Import the OpenAI client
+        from openai import OpenAI
+        client = OpenAI()  # This will use your OPENAI_API_KEY environment variable
+
+        user_context = ""
+        if user:
+            # Add relevant user info for context if available
+            if user.fitness_goal:
+                user_context += f"\nUser's fitness goal: {user.fitness_goal}"
+            if user.diet_preference:
+                user_context += f"\nUser's diet preference: {user.diet_preference}"
+
+        # Create a prompt for GPT
+        prompt = f"""
+        Please analyze this meal and provide an estimate of its nutritional information:
+        
+        Meal: {meal_description}
+        {user_context}
+        
+        Provide ONLY the following information in a valid JSON format:
+        1. Calories (just the number)
+        2. Protein in grams (number followed by 'g')
+        
+        Reply with ONLY a JSON object containing these two fields and nothing else.
+        Example response: {{"calories": "350", "protein": "25g"}}
+        """
+
+        # Create a chat completion
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # Using 3.5-turbo for faster response and lower cost
+            messages=[
+                {"role": "system", "content": "You are a nutritionist who provides precise nutritional calculations. Respond only with the requested JSON format."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=100
+        )
+
+        # Extract the response text
+        response_text = response.choices[0].message.content.strip()
+
+        # Parse JSON from the response
+        import json
+        import re
+
+        try:
+            # First try to parse the entire response as JSON
+            nutrition_data = json.loads(response_text)
+            return nutrition_data
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from the text
+            json_match = re.search(r'({[\s\S]*})', response_text)
+
+            if json_match:
+                try:
+                    nutrition_data = json.loads(json_match.group(1))
+                    return nutrition_data
+                except:
+                    pass
+
+            # Fallback - try to extract numbers directly
+            calories_match = re.search(
+                r'calories["\s:]+(\d+)', response_text, re.IGNORECASE)
+            protein_match = re.search(
+                r'protein["\s:]+(\d+)g', response_text, re.IGNORECASE)
+
+            return {
+                "calories": calories_match.group(1) if calories_match else "300",
+                "protein": f"{protein_match.group(1)}g" if protein_match else "15g"
+            }
+
+    except Exception as e:
+        print(f"Error calculating nutrition: {str(e)}")
+        # Return default values if calculation fails
+        return {
+            "calories": "300",
+            "protein": "15g"
+        }
 
 
 @api_view(['POST'])
