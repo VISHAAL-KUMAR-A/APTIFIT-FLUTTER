@@ -4949,3 +4949,41 @@ def get_recent_chats(request):
         'recent_chats': recent_chats,
         'chat_count': len(recent_chats)
     }, status=200)
+
+
+@api_view(['POST'])
+def get_latest_diet_plan(request):
+    """
+    Get the most recently generated diet plan for the authenticated user
+    """
+    # Check if the user is authenticated
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    try:
+        token_obj = Token.objects.get(token=token)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+
+    # Get the latest diet plan for the user
+    latest_plan = DietPlan.objects.filter(
+        user=user).order_by('-created_at').first()
+
+    if not latest_plan:
+        return Response({
+            'status': 'error',
+            'message': 'No diet plan found. Generate a plan first using api/generate-diet-plan.'
+        }, status=404)
+
+    # Serialize and return the plan
+    serializer = DietPlanSerializer(latest_plan)
+
+    return Response({
+        'status': 'success',
+        'message': 'Latest diet plan retrieved successfully',
+        'data': serializer.data
+    }, status=200)

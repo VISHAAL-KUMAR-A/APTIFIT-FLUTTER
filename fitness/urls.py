@@ -109,4 +109,6 @@ urlpatterns = [
          name='mark_messages_as_read'),
     path('api/delete-message/', views.delete_message, name='delete_message'),
     path('api/get-recent-chats/', views.get_recent_chats, name='get_recent_chats'),
+    path('api/get-latest-diet-plan', views.get_latest_diet_plan,
+         name='get_latest_diet_plan'),
 ]
