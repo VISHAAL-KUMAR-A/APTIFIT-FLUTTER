@@ -197,6 +197,12 @@ def login_user(request):
             )
 
 
+def update_token_activity(token_obj):
+    """Update the last activity timestamp of a token"""
+    token_obj.last_activity = timezone.now()
+    token_obj.save(update_fields=['last_activity'])
+
+
 @api_view(['POST'])
 def validate_token(request):
     if request.method == 'POST':
@@ -221,6 +227,9 @@ def validate_token(request):
                     {"error": "Token has expired. Please login again."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
+
+            # Update last activity time
+            token.update_activity()
 
             # Token is valid, return user data
             serializer = UserSerializer(token.user)

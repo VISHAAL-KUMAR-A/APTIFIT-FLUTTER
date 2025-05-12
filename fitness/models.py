@@ -87,18 +87,36 @@ class Token(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_remember_me = models.BooleanField(default=False)
+    last_activity = models.DateTimeField(default=timezone.now)
 
     def save(self, *args, **kwargs):
-        # Set expiration - 30 days for "remember me" tokens, 24 hours for regular tokens
+        # Set expiration - 30 days for "remember me" tokens, 14 days (2 weeks) for regular tokens
         if not self.expires_at:
             if self.is_remember_me:
                 self.expires_at = timezone.now() + timedelta(days=30)
             else:
-                self.expires_at = timezone.now() + timedelta(hours=24)
+                # Changed from hours=24 to days=14
+                self.expires_at = timezone.now() + timedelta(days=14)
         super().save(*args, **kwargs)
 
     def is_valid(self):
-        return timezone.now() < self.expires_at
+        # Check if token has reached final expiry date first
+        if timezone.now() >= self.expires_at:
+            return False
+
+        # Check if token has expired based on inactivity
+        inactive_period = timezone.now() - self.last_activity
+        # Changed from hours=24 to hours=48
+        if inactive_period > timedelta(hours=48):
+            # Token is invalid due to inactivity
+            return False
+
+        # Token is valid if it hasn't reached expiry date and user hasn't been inactive too long
+        return True
+
+    def update_activity(self):
+        self.last_activity = timezone.now()
+        self.save(update_fields=['last_activity'])
 
 
 class FitnessMetrics(models.Model):
