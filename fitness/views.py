@@ -2604,7 +2604,15 @@ def get_exercise_plan_tips(request):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Check if day is provided
+        if 'day' not in data:
+            return Response(
+                {"error": "Day is required (e.g., 'Monday', 'Tuesday', etc.)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         token_str = data.get('token')
+        day = data.get('day')
 
         try:
             # Validate token and get user
@@ -2630,12 +2638,91 @@ def get_exercise_plan_tips(request):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Generate tips based on the exercise plan
-            tips = generate_exercise_tips(user, latest_plan)
+            # Get the exercises for the specified day
+            plan_data = latest_plan.plan_data
+            day_exercises = None
+
+            # Different plans might have different structures, so handle common formats
+            if day in plan_data:
+                # Format where days are direct keys
+                day_exercises = plan_data[day]
+            elif 'days' in plan_data:
+                # Format where days are in a 'days' array
+                for day_data in plan_data['days']:
+                    if day_data.get('day') == day:
+                        day_exercises = day_data
+                        break
+
+            if not day_exercises:
+                return Response(
+                    {"error": f"No exercises found for {day} in your plan."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Extract exercise names
+            exercises = []
+            if isinstance(day_exercises, dict):
+                # Handle case where day_exercises is a dict with workout details
+                if 'workout' in day_exercises:
+                    exercises.append(day_exercises['workout'])
+                if 'exercises' in day_exercises:
+                    exercises.extend(day_exercises['exercises'])
+                # Try additional common formats
+                if 'workout_name' in day_exercises:
+                    exercises.append(day_exercises['workout_name'])
+
+            # If we have exercises in a list format
+            if 'exercises' in day_exercises and isinstance(day_exercises['exercises'], list):
+                for exercise in day_exercises['exercises']:
+                    if isinstance(exercise, dict) and 'name' in exercise:
+                        exercises.append(exercise['name'])
+                    elif isinstance(exercise, str):
+                        exercises.append(exercise)
+
+            # If no specific exercises found, try to extract them from the text
+            if not exercises:
+                # Try to extract exercise names using regex
+                import re
+                plan_text = str(day_exercises)
+                exercise_matches = re.findall(
+                    r'(?:exercise|workout):\s*([A-Za-z\s]+)', plan_text, re.IGNORECASE)
+                if exercise_matches:
+                    exercises = exercise_matches
+
+            # If we still have no exercises but have a string description
+            if not exercises and isinstance(day_exercises, str):
+                exercises = [day_exercises]  # Use the entire description
+
+            # Get user profile data for context
+            user_profile = {
+                "age": user.age,
+                "gender": user.gender,
+                "fitness_goal": user.fitness_goal,
+                "fitness_level": user.fitness_level
+            }
+
+            # Generate tips for each exercise found
+            all_tips = []
+
+            if exercises:
+                for exercise_name in exercises:
+                    exercise_tips = generate_exercise_tips(
+                        exercise_name, user_profile)
+                    all_tips.append({
+                        "exercise": exercise_name,
+                        "tips": exercise_tips
+                    })
+            else:
+                # If no exercise names could be extracted, provide general workout tips for the day
+                all_tips.append({
+                    "exercise": f"{day}'s workout",
+                    "tips": generate_exercise_tips(f"{day}'s workout", user_profile)
+                })
 
             return Response({
-                "message": "Exercise plan tips retrieved successfully.",
-                "tips": tips
+                "message": f"Exercise tips for {day} retrieved successfully.",
+                "day": day,
+                "tips": all_tips
             }, status=status.HTTP_200_OK)
 
         except Token.DoesNotExist:
@@ -2643,46 +2730,51 @@ def get_exercise_plan_tips(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
-def generate_exercise_tips(user, exercise_plan):
+def generate_exercise_tips(exercise_name, user_profile):
+    """Generate personalized exercise tips using OpenAI API"""
     try:
         # Get OpenAI API key from environment variables
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            return [{"tip_content": "Remember to stay hydrated throughout your workout sessions."}]
+            return ["Unable to generate personalized tips at this time. Please try again later."]
 
         # Using project API key
         client = openai.OpenAI(
             api_key=api_key
         )
 
-        # Get user profile data for context
-        user_profile = {
-            "age": user.age,
-            "gender": user.gender,
-            "fitness_goal": user.fitness_goal,
-            "fitness_level": user.fitness_level
-        }
+        # Format user profile info for the prompt
+        profile_info = ""
+        for key, value in user_profile.items():
+            if value is not None and value != '':
+                profile_info += f"{key.replace('_', ' ').title()}: {value}\n"
 
         # Create prompt for GPT
         system_message = (
-            "You are a fitness expert providing short, practical tips for exercise plans. "
-            "Each tip must be concise (maximum 2 lines or about 100-140 characters) and specific to the user's plan. "
-            "Generate EXACTLY 4 tips that are actionable, motivational, and tailored to the user's profile and plan. "
-            "Format as a simple JSON array of strings, each string being one tip."
+            "You are a professional fitness trainer providing specific, actionable tips for exercises. "
+            "For each exercise, provide EXACTLY 4 concise tips that are tailored to the user's profile. "
+            "Each tip should be 1-2 sentences and focus on form, technique, common mistakes, or modifications "
+            "based on the user's metrics (BMI, fitness level, goals, etc.). "
+            "Return ONLY a JSON array containing exactly 4 tips as strings. No additional text or explanation."
         )
 
         user_message = (
-            f"Generate 4 concise exercise tips (maximum 2 lines each) for a user with this profile: {user_profile}\n\n"
-            f"The user is following this exercise plan: {exercise_plan.plan_data}\n\n"
-            f"Return ONLY a JSON array containing 4 short tips as strings. Each tip should be actionable "
-            f"and directly relevant to this specific plan and user profile."
+            f"Generate 4 specific tips for the exercise: {exercise_name}\n\n"
+            f"User profile:\n{profile_info}\n\n"
+            f"Provide EXACTLY 4 concise, helpful tips as a JSON array of strings. "
+            f"Each tip should be tailored to this specific exercise and user profile."
         )
 
         # Call GPT API
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message}
@@ -2691,46 +2783,32 @@ def generate_exercise_tips(user, exercise_plan):
             temperature=0.7
         )
 
-        # Get the response and parse it
+        # Parse the response
         result = response.choices[0].message.content.strip()
 
-        # Parse the JSON from the response
+        # Try to parse the JSON from the response
         import json
         import re
 
         try:
+            # First try direct JSON parsing
             tips_list = json.loads(result)
 
-            # If not a list or more than 4 tips, adjust
+            # Ensure we have exactly 4 tips
             if not isinstance(tips_list, list):
-                tips_list = [
-                    "Stay hydrated during workouts for better performance.",
-                    "Proper form is better than more repetitions. Quality over quantity.",
-                    "Schedule rest days to allow your muscles to recover and grow.",
-                    "Track your progress weekly to stay motivated and see improvements."
-                ]
+                raise ValueError("Response is not a list")
 
-            # Limit to 4 tips
-            tips_list = tips_list[:4]
+            # Limit to exactly 4 tips
+            if len(tips_list) > 4:
+                tips_list = tips_list[:4]
+                while len(tips_list) < 4:
+                    tips_list.append(
+                        f"Focus on your breathing during the {exercise_name}.")
 
-            # Store tips in database
-            stored_tips = []
-            for tip_content in tips_list:
-                tip = ExerciseTip.objects.create(
-                    user=user,
-                    exercise_plan=exercise_plan,
-                    tip_content=tip_content
-                )
-                stored_tips.append({
-                    "id": tip.id,
-                    "tip_content": tip.tip_content,
-                    "created_at": tip.created_at
-                })
-
-            return stored_tips
+            return tips_list
 
         except json.JSONDecodeError:
-            # If parsing fails, extract with regex or provide default tips
+            # If parsing fails, try to extract with regex
             json_match = re.search(r'\[(.*)\]', result, re.DOTALL)
             if json_match:
                 try:
@@ -2738,47 +2816,36 @@ def generate_exercise_tips(user, exercise_plan):
                     tips_text = "[" + json_match.group(1) + "]"
                     tips_list = json.loads(tips_text)
 
-                    # Store tips in database
-                    stored_tips = []
-                    for tip_content in tips_list[:4]:
-                        tip = ExerciseTip.objects.create(
-                            user=user,
-                            exercise_plan=exercise_plan,
-                            tip_content=tip_content
-                        )
-                        stored_tips.append({
-                            "id": tip.id,
-                            "tip_content": tip.tip_content,
-                            "created_at": tip.created_at
-                        })
+                    # Ensure we have exactly 4 tips
+                    if len(tips_list) > 4:
+                        tips_list = tips_list[:4]
+                    while len(tips_list) < 4:
+                        tips_list.append(
+                            f"Focus on your breathing during the {exercise_name}.")
 
-                    return stored_tips
+                    return tips_list
                 except:
                     pass
 
-            # Fall back to default tips
-            default_tips = [
-                "Stay hydrated during workouts for better performance.",
-                "Proper form is better than more repetitions. Quality over quantity.",
-                "Schedule rest days to allow your muscles to recover and grow.",
-                "Track your progress weekly to stay motivated and see improvements."
+            # If all parsing fails, manually extract tips
+            tips = re.findall(r'[\d\.\"\']+(.*?)[\"\']', result)
+            if tips and len(tips) >= 4:
+                return tips[:4]
+
+            # Last resort: split by newlines or numbers
+            if "1." in result or "1)" in result:
+                tips = re.split(r'\d[\.\)]', result)
+                tips = [tip.strip() for tip in tips if tip.strip()]
+                if tips and len(tips) >= 4:
+                    return tips[:4]
+
+            # If all else fails, provide default tips
+            return [
+                f"Keep proper form during {exercise_name} to prevent injury.",
+                f"Start with lighter weights for {exercise_name} if you're a beginner.",
+                f"Focus on controlled movements while doing {exercise_name}.",
+                f"Remember to breathe properly throughout your {exercise_name}."
             ]
-
-            # Store default tips in database
-            stored_tips = []
-            for tip_content in default_tips:
-                tip = ExerciseTip.objects.create(
-                    user=user,
-                    exercise_plan=exercise_plan,
-                    tip_content=tip_content
-                )
-                stored_tips.append({
-                    "id": tip.id,
-                    "tip_content": tip.tip_content,
-                    "created_at": tip.created_at
-                })
-
-            return stored_tips
 
     except Exception as e:
         # Log the error (in a production environment)
@@ -2786,10 +2853,10 @@ def generate_exercise_tips(user, exercise_plan):
 
         # Provide default tips
         default_tips = [
-            "Stay hydrated during workouts for better performance.",
-            "Proper form is better than more repetitions. Quality over quantity.",
-            "Schedule rest days to allow your muscles to recover and grow.",
-            "Track your progress weekly to stay motivated and see improvements."
+            f"Keep proper form during {exercise_name} to prevent injury.",
+            f"Start with lighter weights for {exercise_name} if you're a beginner.",
+            f"Focus on controlled movements while doing {exercise_name}.",
+            f"Remember to breathe properly throughout your {exercise_name}."
         ]
 
         # Store default tips in database
