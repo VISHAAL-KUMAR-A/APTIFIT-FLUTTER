@@ -111,4 +111,6 @@ urlpatterns = [
     path('api/get-recent-chats/', views.get_recent_chats, name='get_recent_chats'),
     path('api/get-latest-diet-plan', views.get_latest_diet_plan,
          name='get_latest_diet_plan'),
+    path('api/get-latest-exercise-plan', views.get_latest_exercise_plan,
+         name='get_latest_exercise_plan'),
 ]

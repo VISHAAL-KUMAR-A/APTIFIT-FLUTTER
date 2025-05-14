@@ -5063,3 +5063,55 @@ def get_latest_diet_plan(request):
         'message': 'Latest diet plan retrieved successfully',
         'data': serializer.data
     }, status=200)
+
+
+@api_view(['POST'])
+def get_latest_exercise_plan(request):
+    if request.method == 'POST':
+        data = request.data
+
+        # Check if token is provided
+        if 'token' not in data:
+            return Response(
+                {"error": "Token is required. Please login first."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token_str = data.get('token')
+
+        try:
+            # Validate token and get user
+            token = Token.objects.get(token=token_str)
+
+            # Check if token is expired
+            if not token.is_valid():
+                token.delete()
+                return Response(
+                    {"error": "Token has expired. Please login again."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user = token.user
+
+            # Get the most recent exercise plan for the user
+            latest_plan = ExercisePlan.objects.filter(
+                user=user).order_by('-created_at').first()
+
+            if not latest_plan:
+                return Response(
+                    {"error": "No exercise plan found. Generate a plan first."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Serialize and return the latest plan
+            serializer = ExercisePlanSerializer(latest_plan)
+            return Response({
+                "message": "Latest exercise plan retrieved successfully.",
+                "plan": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token. Please login again."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
