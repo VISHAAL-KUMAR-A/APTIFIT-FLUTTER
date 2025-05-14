@@ -3075,6 +3075,14 @@ def update_preferences(request):
     # Track which fields were updated
     updated_fields = []
 
+    # First, check and process workout location changes
+    changing_to_gym = False
+    if 'workout_location' in request.data:
+        new_location = request.data.get('workout_location')
+        # Check if changing to gym regardless of previous location
+        if new_location == 'At the GYM':
+            changing_to_gym = True
+
     # Update each field if provided in the request
     for field in updatable_fields:
         if field in request.data:
@@ -3083,6 +3091,14 @@ def update_preferences(request):
             if value:
                 setattr(user, field, value)
                 updated_fields.append(field)
+
+    # If changing to gym, always set equipment_preference to null
+    if changing_to_gym:
+        # Reset equipment preference to null
+        if user.equipment_preference is not None:
+            user.equipment_preference = None
+            if 'equipment_preference' not in updated_fields:
+                updated_fields.append('equipment_preference')
 
     # Save the user if any fields were updated
     if updated_fields:
