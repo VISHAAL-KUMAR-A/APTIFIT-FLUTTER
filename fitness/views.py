@@ -4033,8 +4033,8 @@ def get_all_users(request):
         user_token = Token.objects.get(token=token_value)
         requesting_user = user_token.user
 
-        # Get all users
-        users = User.objects.all()
+        # Get all users EXCEPT the requesting user
+        users = User.objects.exclude(id=requesting_user.id)
 
         # Convert users to a list of dictionaries with basic info
         user_list = []
