@@ -4033,8 +4033,12 @@ def get_all_users(request):
         user_token = Token.objects.get(token=token_value)
         requesting_user = user_token.user
 
-        # Get all users EXCEPT the requesting user
-        users = User.objects.exclude(id=requesting_user.id)
+        # Get IDs of the user's friends
+        friend_ids = requesting_user.friends.values_list('id', flat=True)
+
+        # Get all users EXCEPT the requesting user AND their friends
+        users = User.objects.exclude(
+            id=requesting_user.id).exclude(id__in=friend_ids)
 
         # Convert users to a list of dictionaries with basic info
         user_list = []
