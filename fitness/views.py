@@ -15,6 +15,7 @@ from django.conf import settings
 import re
 from django.http import JsonResponse
 from django.db import models
+from openai import OpenAI
 
 
 # Create your views here.
@@ -5135,3 +5136,146 @@ def get_latest_exercise_plan(request):
                 {"error": "Invalid token. Please login again."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+@api_view(['POST'])
+def food_question(request):
+    """
+    Answer food-related questions about items in the user's diet plan
+    """
+    # Extract the token from the request body
+    token_value = request.data.get('token')
+    if not token_value:
+        return Response({'error': 'Authentication token is required'}, status=401)
+
+    # Get the question
+    question = request.data.get('question')
+    if not question:
+        return Response({'error': 'Question is required'}, status=400)
+
+    # Get the meal details
+    meal_name = request.data.get('meal_name')
+    if not meal_name:
+        return Response({'error': 'Meal name is required'}, status=400)
+
+    try:
+        # Verify the token
+        token_obj = Token.objects.get(token=token_value)
+        if not token_obj.is_valid():
+            return Response({'error': 'Token has expired'}, status=401)
+        user = token_obj.user
+
+        # Check if the meal name is food-related
+        if not is_food_related(meal_name):
+            return Response({
+                'status': 'error',
+                'message': 'This API is for food-related questions only. The meal name does not appear to be a food item.'
+            }, status=400)
+
+        # Get answer from GPT
+        answer = get_food_information(question, meal_name, user)
+
+        # Save the Q&A to the database
+        health_qa = HealthQA.objects.create(
+            user=user,
+            question=f"Food Question: {question} about {meal_name}",
+            answer=answer
+        )
+
+        return Response({
+            'status': 'success',
+            'question': question,
+            'meal_name': meal_name,
+            'answer': answer
+        })
+
+    except Token.DoesNotExist:
+        return Response({'error': 'Invalid token'}, status=401)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+def is_food_related(meal_name):
+    """
+    Check if the given meal name is related to food or not
+    """
+    # List of common exercise equipment and non-food items
+    non_food_items = [
+        'dumbbell', 'dumbbells', 'barbell', 'barbells', 'treadmill', 'elliptical',
+        'weights', 'bench', 'exercise', 'workout', 'training', 'fitness', 'gym',
+        'yoga mat', 'kettlebell', 'medicine ball', 'resistance band', 'jump rope',
+        'pull-up bar', 'rowing machine', 'stationary bike', 'exercise bike',
+        'ab roller', 'sport', 'sports', 'pilates', 'cardio', 'crossfit',
+        'weightlifting', 'bodybuilding', 'running', 'cycling', 'swimming',
+        'machine', 'equipment', 'gear', 'shoes', 'supplement', 'clothing'
+    ]
+
+    # Check if any non-food item appears in the meal name
+    meal_lower = meal_name.lower()
+    for item in non_food_items:
+        if item in meal_lower:
+            return False
+
+    return True
+
+
+def get_food_information(question, meal_name, user):
+    """
+    Get food information from GPT-4 about a specific meal
+    """
+    try:
+        # Create the prompt for GPT
+        user_profile = {
+            'diet_preference': user.diet_preference if hasattr(user, 'diet_preference') and user.diet_preference else 'Not specified',
+            'allergies': user.allergies_restrictions if hasattr(user, 'allergies_restrictions') and user.allergies_restrictions else 'None',
+            'food_culture': user.food_culture if hasattr(user, 'food_culture') and user.food_culture else 'Not specified',
+        }
+
+        prompt = f"""
+        The user is asking about this meal: "{meal_name}".
+        Their question is: "{question}"
+        
+        User dietary information:
+        - Diet preference: {user_profile['diet_preference']}
+        - Allergies/restrictions: {user_profile['allergies']}
+        - Food culture: {user_profile['food_culture']}
+        
+        If the question is not related to food or nutrition, respond only with: "I can only answer questions about food and nutrition."
+        
+        Otherwise, please provide a helpful answer about this food item in EXACTLY 3 numbered points maximum.
+        Focus only on answering the specific question about this food.
+        Be accurate, concise, and helpful.
+        Format your response as plain text with proper line breaks, not as escaped strings.
+        """
+
+        # Get OpenAI API key from environment variables
+        api_key = os.environ.get('OPENAI_API_KEY')
+
+        if not api_key:
+            return "OpenAI API key not found. Please check your environment configuration."
+
+        # Initialize the OpenAI client with the API key
+        client = OpenAI(api_key=api_key)
+
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "system", "content": "You are a helpful nutrition assistant. You only answer questions about food and nutrition."},
+                      {"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.7
+        )
+
+        # Get the answer and process it to replace escaped newlines with actual line breaks
+        answer = response.choices[0].message.content.strip()
+
+        # Replace any literal \n with actual newlines and then back to HTML <br> tags
+        # This handles both cases where GPT might return either \n or actual newlines
+        answer = answer.replace('\\n', '\n')
+        answer = answer.replace('\n', '')
+
+        return answer
+
+    except Exception as e:
+        print(f"Error getting food information: {str(e)}")
+        return "I couldn't generate information about this food. Please try again later."
