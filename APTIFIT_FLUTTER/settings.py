@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'daphne',
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'allauth',
@@ -52,6 +53,7 @@ INSTALLED_APPS = [
     'dj_rest_auth',
     'dj_rest_auth.registration',
     'corsheaders',
+    'channels',
 ]
 SITE_ID = 1
 
@@ -88,6 +90,13 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'APTIFIT_FLUTTER.wsgi.application'
+ASGI_APPLICATION = 'APTIFIT_FLUTTER.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
