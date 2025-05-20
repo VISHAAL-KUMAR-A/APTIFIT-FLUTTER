@@ -16,6 +16,8 @@ import re
 from django.http import JsonResponse
 from django.db import models
 from openai import OpenAI
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 
 # Create your views here.
@@ -4517,6 +4519,32 @@ def send_friend_request(request):
         sender.friends.add(recipient)
         # Remove the pending request
         recipient.friend_requests_sent.remove(sender)
+
+        # Notify both users via WebSocket
+        channel_layer = get_channel_layer()
+
+        # Notify sender that recipient accepted their friendship
+        async_to_sync(channel_layer.group_send)(
+            f'user_{sender.id}',
+            {
+                'type': 'friend_request_accepted',
+                'friend': recipient.name or recipient.email,
+                'friend_id': recipient.id,
+                'message': f'You and {recipient.name or recipient.email} are now friends'
+            }
+        )
+
+        # Notify recipient that sender accepted their friendship
+        async_to_sync(channel_layer.group_send)(
+            f'user_{recipient.id}',
+            {
+                'type': 'friend_request_accepted',
+                'friend': sender.name or sender.email,
+                'friend_id': sender.id,
+                'message': f'You and {sender.name or sender.email} are now friends'
+            }
+        )
+
         return Response({
             'message': f'You and {recipient.name or recipient.email} are now friends',
             'friend_count': sender.friends.count()
@@ -4524,6 +4552,18 @@ def send_friend_request(request):
 
     # Send friend request
     sender.friend_requests_sent.add(recipient)
+
+    # Notify recipient via WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'user_{recipient.id}',
+        {
+            'type': 'friend_request',
+            'sender': sender.name or sender.email,
+            'sender_id': sender.id,
+            'message': f'{sender.name or sender.email} sent you a friend request'
+        }
+    )
 
     return Response({
         'message': f'Friend request sent to {recipient.name or recipient.email}',

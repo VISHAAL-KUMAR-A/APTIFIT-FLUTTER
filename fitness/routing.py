@@ -1,6 +1,7 @@
-from django.urls import path, include
-from fitness.consumers import ChatConsumer
+from django.urls import path
+from fitness.consumers import ChatConsumer, FriendRequestConsumer
 
 websocket_urlpatterns = [
-    path("", ChatConsumer.as_asgi()),
+    path("chat/", ChatConsumer.as_asgi()),
+    path("friends/<int:user_id>/", FriendRequestConsumer.as_asgi()),
 ]
