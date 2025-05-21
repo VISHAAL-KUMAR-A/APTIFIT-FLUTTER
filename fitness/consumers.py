@@ -49,7 +49,8 @@ class FriendRequestConsumer(AsyncWebsocketConsumer):
             'type': 'friend_request',
             'sender': event['sender'],
             'sender_id': event['sender_id'],
-            'message': event['message']
+            'message': event['message'],
+            'action': 'refresh_requests'
         }))
 
     async def friend_request_accepted(self, event):
@@ -58,7 +59,18 @@ class FriendRequestConsumer(AsyncWebsocketConsumer):
             'type': 'friend_request_accepted',
             'friend': event['friend'],
             'friend_id': event['friend_id'],
-            'message': event['message']
+            'message': event['message'],
+            'action': 'refresh_friends'
+        }))
+
+    async def friend_request_declined(self, event):
+        """ Send notification that a friend request was declined """
+        await self.send(text_data=json.dumps({
+            'type': 'friend_request_declined',
+            'user': event['user'],
+            'user_id': event['user_id'],
+            'message': event['message'],
+            'action': 'refresh_all_users'
         }))
 
     @database_sync_to_async

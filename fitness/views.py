@@ -4605,11 +4605,39 @@ def respond_to_friend_request(request):
     if recipient not in sender.friend_requests_sent.all():
         return Response({'error': 'No pending friend request from this user'}, status=400)
 
+    # Get the channel layer for WebSocket notifications
+    channel_layer = get_channel_layer()
+
     if action == 'accept':
         # Add users as friends
         recipient.friends.add(sender)
         # Remove the pending request
         sender.friend_requests_sent.remove(recipient)
+
+        # Notify both users via WebSocket about new friendship
+
+        # Notify recipient (current user)
+        async_to_sync(channel_layer.group_send)(
+            f'user_{recipient.id}',
+            {
+                'type': 'friend_request_accepted',
+                'friend': sender.name or sender.email,
+                'friend_id': sender.id,
+                'message': f'You and {sender.name or sender.email} are now friends'
+            }
+        )
+
+        # Notify sender
+        async_to_sync(channel_layer.group_send)(
+            f'user_{sender.id}',
+            {
+                'type': 'friend_request_accepted',
+                'friend': recipient.name or recipient.email,
+                'friend_id': recipient.id,
+                'message': f'You and {recipient.name or recipient.email} are now friends'
+            }
+        )
+
         return Response({
             'message': f'You and {sender.name or sender.email} are now friends',
             'friend_count': recipient.friends.count()
@@ -4617,6 +4645,18 @@ def respond_to_friend_request(request):
     else:  # decline
         # Just remove the pending request
         sender.friend_requests_sent.remove(recipient)
+
+        # Notify sender that their request was declined
+        async_to_sync(channel_layer.group_send)(
+            f'user_{sender.id}',
+            {
+                'type': 'friend_request_declined',
+                'user': recipient.name or recipient.email,
+                'user_id': recipient.id,
+                'message': f'{recipient.name or recipient.email} declined your friend request'
+            }
+        )
+
         return Response({
             'message': f'Friend request from {sender.name or sender.email} declined'
         }, status=200)
