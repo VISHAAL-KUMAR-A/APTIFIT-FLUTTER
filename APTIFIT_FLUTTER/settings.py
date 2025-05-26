@@ -30,7 +30,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'a-default-development-only-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.onrender.com',  # Allows all subdomains on render.com
+]
 
 
 # Application definition
