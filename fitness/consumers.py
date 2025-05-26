@@ -1,7 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import User, Token
+from .models import User, Token, Message
 
 
 class FriendRequestConsumer(AsyncWebsocketConsumer):
@@ -195,12 +195,19 @@ class ChatNotificationConsumer(AsyncWebsocketConsumer):
 
     async def new_message_notification(self, event):
         """Send notification about new message to the recipient"""
+        # Mark the message as read since it's being delivered in real-time
+        if event.get('message_id'):
+            await self.mark_message_as_read(event['message_id'])
+
+        # Send the message to the WebSocket
         await self.send(text_data=json.dumps({
             'type': 'new_message',
+            'message_id': event.get('message_id'),
             'sender_id': event['sender_id'],
             'sender_name': event['sender_name'],
-            'message_preview': event['message_preview'],
-            'actions': ['refresh_unread', 'refresh_recent']
+            'content': event['content'],
+            'created_at': event['created_at'],
+            'is_read': True
         }))
 
     @database_sync_to_async
@@ -209,3 +216,12 @@ class ChatNotificationConsumer(AsyncWebsocketConsumer):
             return User.objects.get(id=user_id)
         except User.DoesNotExist:
             return None
+
+    @database_sync_to_async
+    def mark_message_as_read(self, message_id):
+        try:
+            message = Message.objects.get(id=message_id)
+            message.is_read = True
+            message.save()
+        except Message.DoesNotExist:
+            pass
