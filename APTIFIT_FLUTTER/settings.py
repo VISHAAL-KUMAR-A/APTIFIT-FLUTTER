@@ -36,6 +36,29 @@ ALLOWED_HOSTS = [
     '.onrender.com',  # Allows all subdomains on render.com
 ]
 
+# Redis Configuration
+REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'False') == 'True'
+REDIS_URL = os.getenv('REDIS_URL', '')
+
+# Channel Layers Configuration
+if REDIS_ENABLED and REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
+# Port Configuration for Daphne
+DAPHNE_PORT = int(os.getenv('PORT', 8000))
 
 # Application definition
 
@@ -95,12 +118,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'APTIFIT_FLUTTER.wsgi.application'
 ASGI_APPLICATION = 'APTIFIT_FLUTTER.asgi.application'
-
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
