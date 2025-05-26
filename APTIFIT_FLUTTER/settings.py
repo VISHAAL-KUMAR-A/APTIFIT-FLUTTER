@@ -37,8 +37,8 @@ ALLOWED_HOSTS = [
 ]
 
 # Redis Configuration
-# REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'False') == 'True'
-# REDIS_URL = os.getenv('REDIS_URL', '')
+REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'False') == 'False'
+REDIS_URL = os.getenv('REDIS_URL', '')
 
 # Channel Layers Configuration
 if REDIS_ENABLED and REDIS_URL:
