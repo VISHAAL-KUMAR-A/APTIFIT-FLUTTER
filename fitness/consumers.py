@@ -164,3 +164,48 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message = event["message"]
         username = event["username"]
         await self.send(text_data=json.dumps({"message": message, "username": username}))
+
+
+class ChatNotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        # Get user ID from URL path
+        self.user_id = self.scope['url_route']['kwargs']['user_id']
+        self.user = await self.get_user(self.user_id)
+
+        if not self.user:
+            await self.close()
+            return
+
+        self.room_group_name = f'chat_notifications_{self.user_id}'
+
+        # Join user's personal notification group
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        # Leave notification group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+
+    async def new_message_notification(self, event):
+        """Send notification about new message to the recipient"""
+        await self.send(text_data=json.dumps({
+            'type': 'new_message',
+            'sender_id': event['sender_id'],
+            'sender_name': event['sender_name'],
+            'message_preview': event['message_preview'],
+            'actions': ['refresh_unread', 'refresh_recent']
+        }))
+
+    @database_sync_to_async
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return None

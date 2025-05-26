@@ -2,7 +2,13 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import User, Token, FitnessMetrics, HealthQA, ExercisePlan, ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan, Group, ExerciseSet, Message
+from .models import (
+    User, Token, FitnessMetrics, HealthQA, ExercisePlan,
+    ExerciseTip, ExerciseMetrics, WorkoutNote, DietPlan,
+    Group, ExerciseSet, Message
+)
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from .serializers import UserSerializer, FitnessMetricsSerializer, HealthQASerializer, ExercisePlanSerializer, ExerciseMetricsSerializer, WorkoutNoteSerializer, DietPlanSerializer, GroupSerializer, ExerciseSetSerializer, MessageSerializer
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
@@ -4884,6 +4890,18 @@ def send_message(request):
         content=content
     )
     message.save()
+
+    # Send WebSocket notification to recipient
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_notifications_{recipient.id}',
+        {
+            'type': 'new_message_notification',
+            'sender_id': sender.id,
+            'sender_name': sender.name or sender.email,
+            'message_preview': content[:50] + '...' if len(content) > 50 else content,
+        }
+    )
 
     # Return the created message
     serializer = MessageSerializer(message)
