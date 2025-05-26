@@ -4312,7 +4312,8 @@ def get_exercise_tips(request):
         return Response({'error': 'Invalid token'}, status=401)
 
     # Get exercise name from request
-    exercise_name = request.data.get('exercise')
+    # Changed from 'exercise' to 'exercise_name'
+    exercise_name = request.data.get('exercise_name')
     if not exercise_name:
         return Response({'error': 'Exercise name is required'}, status=400)
 

@@ -103,7 +103,6 @@ urlpatterns = [
          name='get_exercise_sets'),
     path('api/send-message/', views.send_message, name='send_message'),
     path('api/get-chat-history/', views.get_chat_history, name='get_chat_history'),
-
     path('api/delete-message/', views.delete_message, name='delete_message'),
     path('api/get-recent-chats/', views.get_recent_chats, name='get_recent_chats'),
     path('api/get-latest-diet-plan', views.get_latest_diet_plan,
