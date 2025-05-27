@@ -3181,7 +3181,7 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
 
     # Create a detailed prompt for OpenAI
     prompt = f"""
-    Generate a detailed weekly diet plan for a user with the following profile:
+    Generate a detailed weekly diet plan with specific meal timings for a user with the following profile:
     
     Age: {user_profile['age'] or 'Not specified'}
     Gender: {user_profile['gender'] or 'Not specified'}
@@ -3198,13 +3198,15 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
     
     Additional Specific Needs: {specific_needs}
     
-    Based on this profile, create a detailed 7-day diet plan with 3 meals and 2 snacks per day.
+    Based on this profile, create a detailed 7-day diet plan with 3 meals and 2 snacks per day, including specific recommended times for each meal.
     
-    Please consider the user's food culture, country, food openness level, spice preference, and allergies/restrictions.
-    If they have a specific food culture or country, include traditional and appropriate foods from that culture.
-    Adjust spice levels according to their preference.
-    If food openness is low (1-2), stick to familiar foods; if high (4-5), include more adventurous options.
-    Strictly avoid any foods mentioned in allergies/restrictions.
+    Please consider:
+    1. The user's food culture, country, food openness level, spice preference, and allergies/restrictions
+    2. If they have a specific food culture or country, include traditional and appropriate foods from that culture
+    3. Adjust spice levels according to their preference
+    4. If food openness is low (1-2), stick to familiar foods; if high (4-5), include more adventurous options
+    5. Strictly avoid any foods mentioned in allergies/restrictions
+    6. Provide optimal timing for each meal considering proper gaps between meals
     
     Format the response as a valid JSON object with the following structure:
     {{
@@ -3221,30 +3223,35 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
           "meals": [
             {{
               "type": "Breakfast",
+              "recommended_time": "HH:MM AM/PM",
               "meal": "Description",
               "calories": "Approximate calories",
               "protein": "Protein in grams"
             }},
             {{
               "type": "Lunch",
+              "recommended_time": "HH:MM AM/PM",
               "meal": "Description",
               "calories": "Approximate calories",
               "protein": "Protein in grams"
             }},
             {{
               "type": "Dinner",
+              "recommended_time": "HH:MM AM/PM",
               "meal": "Description",
               "calories": "Approximate calories",
               "protein": "Protein in grams"
             }},
             {{
               "type": "Snack 1",
+              "recommended_time": "HH:MM AM/PM",
               "meal": "Description",
               "calories": "Approximate calories",
               "protein": "Protein in grams"
             }},
             {{
               "type": "Snack 2",
+              "recommended_time": "HH:MM AM/PM",
               "meal": "Description",
               "calories": "Approximate calories",
               "protein": "Protein in grams"
@@ -3255,11 +3262,19 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
       "tips": [
         "Tip 1",
         "Tip 2",
-        "Tip 3"
+        "Tip 3",
+        "Tip about meal timing importance"
       ]
     }}
     
-    Important: Use the days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) instead of Day 1, Day 2, etc. Include all 7 days in the "days" array with the same structure as shown above. Make sure the JSON is valid with no comments or trailing commas. The response must be a properly formatted JSON object that can be parsed. For each meal, provide both calories and protein content in grams.
+    Important: 
+    1. Use the days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) instead of Day 1, Day 2, etc.
+    2. Include all 7 days in the "days" array with the same structure as shown above
+    3. Make sure the JSON is valid with no comments or trailing commas
+    4. The response must be a properly formatted JSON object that can be parsed
+    5. For each meal, provide both calories and protein content in grams
+    6. Include a recommended_time for each meal in 12-hour format (e.g., "8:00 AM", "1:30 PM")
+    7. Ensure reasonable gaps between meals for proper digestion
     """
 
     try:
@@ -3271,7 +3286,7 @@ def generate_gpt_diet_plan(user, bmi=None, specific_needs='', allergies=''):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a professional nutritionist and dietitian who returns valid JSON responses."},
+                {"role": "system", "content": "You are a professional nutritionist and dietitian who returns valid JSON responses with specific meal timings."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
