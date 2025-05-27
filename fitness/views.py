@@ -3404,6 +3404,11 @@ def update_diet_plan(request):
             print(f"Error generating nutritional data: {str(e)}")
             # Continue with user-provided data if generation fails
 
+    # Update recommended_time with current time
+    from datetime import datetime
+    current_time = datetime.now().strftime("%I:%M %p")  # Format as "HH:MM AM/PM"
+    meal_data['recommended_time'] = current_time
+
     try:
         # Find the diet plan
         diet_plan = DietPlan.objects.get(id=diet_plan_id, user=user)
@@ -3531,7 +3536,8 @@ def update_diet_plan(request):
         return Response({
             'status': 'success',
             'message': f'Successfully updated {meal_type} for {day}',
-            'data': serializer.data
+            'data': serializer.data,
+            'updated_time': current_time
         })
     except DietPlan.DoesNotExist:
         return Response({
