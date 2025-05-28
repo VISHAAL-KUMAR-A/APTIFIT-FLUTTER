@@ -34,6 +34,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '.onrender.com',  # Allows all subdomains on render.com
+    '54.172.223.51',  # Added EC2 instance IP
 ]
 
 # Redis Configuration
